@@ -206,3 +206,16 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .DS_Store
+
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.synctex.gz
+*.fdb_latexmk
+*.fls
+
+# Experiment results
+experiments/results/

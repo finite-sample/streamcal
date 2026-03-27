@@ -1,0 +1,14 @@
+[project]
+name = "mwu-calibration"
+version = "0.1.0"
+description = "Streaming probability calibration via multiplicative weights"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "matplotlib",
+]
+
+[project.urls]
+Repository = "https://github.com/soodoku/mw-calibration"

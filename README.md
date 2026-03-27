@@ -1,69 +1,49 @@
-# Always‑On Probability Calibration via Multiplicative‑Weights
+# MWU Calibration
 
-## 1  Realistic production scenario
+Streaming probability calibration via multiplicative weights.
 
-**Context**  ▸ A large ad platform serves millions of impressions per hour.  An upstream ML model outputs raw click‑through probabilities \$p^{\text{raw}}\$.  Over time, systematic **drift** appears (creative fatigue, seasonality, campaign mix).  Business KPIs and auctions require **well‑calibrated probabilities** at any moment.
+## The Problem
 
-**Key constraint**  ▸ You can’t stop traffic to retrain a calibrator on every batch; compute must stay sub‑millisecond per impression.
+Batch calibrators (Platt scaling, isotonic regression) require periodic refits, creating a compute-drift tradeoff. MWU updates per-bucket bias factors with O(#buckets) cost per batch, adapting continuously without offline jobs.
 
----
+## Method
 
-## 2  What practitioners typically do
+Maintain bias factors $c_b$ per bucket. After each batch:
 
-| Method                       | Workflow                                                      | Pain‑point                                                           |
-| ---------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------- |
-| **Platt scaling** (logistic) | Train on yesterday’s data; deploy coefficients until next job | Loses calibration as drift grows; spikes CPU/latency when retrained. |
-| **Isotonic regression**      | Same nightly (or hourly) batch job; guarantees monotonicity   | Same drift issue; heavier CPU and memory if many segments.           |
+$$c_b \leftarrow c_b \cdot \exp(-\eta \cdot (\tilde{r}_b - \hat{r}_b))$$
 
-**Trade‑off**  ▸ Fewer retrains ⟶ lower compute, but larger calibration error between jobs.  More frequent retrains ⟶ accuracy stays tight, compute scales $\mathcal O(N_{\text{seen}})$ and may breach SLA.
+where $\tilde{r}_b$ is the mean calibrated probability and $\hat{r}_b$ is the observed outcome rate.
 
----
+## Key Results
 
-## 3  Our proposal: **Vectorised Multiplicative‑Weights Update (MWU)**
+From semi-synthetic experiments (LightGBM base model, linear drift, B=50):
 
-* Maintain one **bias weight** \$c\_b\$ per calibration bucket / segment.
-* After each mini‑batch: update all buckets **once** via
-  $c_b \leftarrow c_b\,\exp\bigl(-\eta\,(\hat r_b-\tilde r_b)\bigr),$
-  where \$\hat r\_b\$ is the batch click‑rate and \$\tilde r\_b\$ the predicted rate.
-* Complexity **$\mathcal O(\text{#buckets})$** regardless of events processed.
-* Adapts instantly to drift; no full refit, no heavy solver.
+| Method | Brier | ECE | CPU ms/batch |
+|--------|-------|-----|--------------|
+| MWU | 0.133 | 0.070 | 0.08 |
+| Platt (every batch) | 0.129 | 0.043 | 4.92 |
+| Isotonic | 0.128 | 0.043 | 4.36 |
 
----
+MWU is **61× faster** than Platt and **54× faster** than isotonic while achieving comparable Brier scores.
 
-## 4  Simulation setup
+## Quick Start
 
-* **200 k** impressions streamed in **40 batches** (5 k each).
-* Upward probability drift encoded in the logit mean \$\mu\_t\$.
-* **100 reliability buckets.**
-* Compare per‑batch **Brier** & **CPU time**:
+```python
+from experiments.methods import MWUCalibrator
 
-  * Platt (logistic), Isotonic (PAV) — *retrained every batch* ➊
-  * **MWU** (vectorised bucket update).
+cal = MWUCalibrator(n_buckets=50, eta=0.1)
 
-➊ We retrain each batch to show compute scaling. In practice retrain cadence is slower; see §5.
+for p_raw, y in data_stream:
+    p_calibrated = cal.update(p_raw, y)
+```
 
----
+## Reproduce
 
-## 5  Results (aggregate over 40 batches)
+```bash
+python experiments/run_experiments.py
+python experiments/generate_figures.py
+```
 
-| Metric                   | Platt                    | Isotonic       | **MWU**                     |
-| ------------------------ | ------------------------ | -------------- | --------------------------- |
-| **Mean per‑batch Brier** | **0.2051**               | 0.2045         | 0.2052                      |
-| **Std (Brier)**          | 0.0019                   | **0.0017**     | 0.0019                      |
-| **Mean CPU s / batch**   | 0.0243                   | 0.0181         | **0.00039**                 |
-| **Compute scaling**      | grows linearly with data | grows linearly | \~flat ($\approx$ constant) |
+## Paper
 
-*Platt & Isotonic achieve slightly lower Brier—at the cost of ****60×‑100× more CPU****.*
-
-> **If retrained hourly instead of per‑batch**: their compute would drop, but calibration error would **drift upward** between retrains; MWU keeps both error and compute flat.
-
----
-
-## 6  Take‑aways
-
-* **MWU = always‑on calibrator** — cheap exponential updates keep probabilities aligned without offline jobs.
-* Offers a clean knob (learning‑rate \$\eta\$) to trade stability vs. responsiveness.
-* Ideal for ad serving, recommender systems, or any high‑volume setting where **latency and continual drift** rule out heavy batch retrains.
-
----
-
+See [ms/mwu_calibration.pdf](ms/mwu_calibration.pdf) for theory and full experimental results.
