@@ -1,29 +1,21 @@
 API Reference
 =============
 
-Streaming Calibrators
+Streaming Calibration
 ---------------------
 
-.. autoclass:: streamcal.MWUCalibrator
+.. autoclass:: streamcal.StreamingIsotonicCalibrator
    :members:
    :undoc-members:
 
-.. autoclass:: streamcal.OnlineSGD
-   :members:
-   :undoc-members:
-
-.. autoclass:: streamcal.PerBucketEMA
-   :members:
-   :undoc-members:
-
-Batch Calibrators
+Batch Calibration
 -----------------
 
-.. autoclass:: streamcal.TemperatureScaling
+.. autoclass:: streamcal.IsotonicCalibrator
    :members:
    :undoc-members:
 
-.. autoclass:: streamcal.IsotonicCalibrator
+.. autoclass:: streamcal.TemperatureScaling
    :members:
    :undoc-members:
 

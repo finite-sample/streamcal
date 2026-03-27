@@ -1,93 +1,57 @@
-# MWU Calibration
+# streamcal
 
+[![PyPI](https://img.shields.io/pypi/v/streamcal)](https://pypi.org/project/streamcal/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Streaming probability calibration via multiplicative weights.
+Calibrate ML probability outputs in streaming settings.
 
-## Installation
+## The Problem
+
+Your model outputs 0.7 for a prediction. Is the true probability actually 70%? Usually not—most models are miscalibrated. You need to learn a correction function, but:
+
+- Data arrives in batches (streaming)
+- Distribution shifts over time
+- You need monotonicity (if model says A > B, calibrated should too)
+
+## Install
 
 ```bash
 pip install streamcal
 ```
 
-For development:
-```bash
-pip install -e ".[dev]"
-```
-
-## The Problem
-
-ML models output probabilities that are often miscalibrated—a predicted 70% doesn't mean 70% of those cases are positive. Batch calibrators (Platt scaling, isotonic regression) require periodic refits, creating a compute-drift tradeoff.
-
-MWU maintains per-bucket bias factors with O(#buckets) cost per batch, adapting continuously without offline retraining.
-
-## Method
-
-Maintain bias factors $c_b$ per bucket. After each batch:
-
-$$c_b \leftarrow c_b \cdot \exp(-\eta \cdot (\bar{p}_b - \bar{y}_b))$$
-
-where $\bar{p}_b$ is the mean calibrated probability and $\bar{y}_b$ is the observed outcome rate in bucket $b$.
-
-## Results
-
-Semi-synthetic experiments (LightGBM base model, linear drift, B=50 buckets):
-
-| Method | Brier | ECE | CPU ms/batch |
-|--------|-------|-----|--------------|
-| MWU | 0.133 | 0.070 | 0.08 |
-| Platt | 0.129 | 0.043 | 4.92 |
-| Isotonic | 0.128 | 0.043 | 4.36 |
-
-MWU is **61× faster** than Platt while achieving comparable Brier scores.
-
 ## Usage
 
 ```python
-from streamcal import MWUCalibrator
+from streamcal import StreamingIsotonicCalibrator
 
-cal = MWUCalibrator(n_buckets=50, eta=0.1)
+cal = StreamingIsotonicCalibrator(n_buckets=100, alpha=0.1)
 
-for p_raw, y in data_stream:
-    p_calibrated = cal.update(p_raw, y)
+for batch in data_stream:
+    p_calibrated = cal.update(batch.predictions, batch.outcomes)
+    # Use p_calibrated for decisions
 ```
 
-### Available Calibrators
+That's it. The calibrator:
+- Tracks outcome rates per probability bucket via EMA
+- Projects to monotonic function via PAV
+- Adapts to drift (tune `alpha`: higher = faster adaptation)
 
-**Streaming (online):**
-- `MWUCalibrator` - Multiplicative Weights Update
-- `OnlineSGD` - Online SGD with additive updates
-- `PerBucketEMA` - Per-bucket exponential moving average
+## API
 
-**Batch (refit on accumulated data):**
-- `PlattScaling` - Logistic regression on logits
-- `IsotonicCalibrator` - Isotonic regression
-- `TemperatureScaling` - Temperature scaling
-
-### Metrics
+| Calibrator | Use Case |
+|------------|----------|
+| `StreamingIsotonicCalibrator` | Streaming, guaranteed monotonic |
+| `NearlyIsotonicCalibrator` | Streaming, soft monotonicity |
+| `IsotonicCalibrator` | Batch baseline |
+| `PlattScaling` | Batch baseline |
+| `TemperatureScaling` | Batch baseline |
 
 ```python
 from streamcal import brier_score, expected_calibration_error
 
-brier = brier_score(y_true, y_pred)
-ece = expected_calibration_error(y_true, y_pred, n_bins=20)
+brier_score(y_true, y_pred)           # Lower is better
+expected_calibration_error(y_true, y_pred)  # Lower is better
 ```
-
-## Reproduce Experiments
-
-```bash
-pip install -e ".[experiments]"
-python experiments/run_experiments.py
-python experiments/generate_figures.py
-```
-
-## Paper
-
-See [ms/mwu_calibration.pdf](ms/mwu_calibration.pdf) for theory and full results.
-
-## Related Work
-
-This uses the same MWU/mirror descent algorithm as [onlinerake](https://github.com/soodoku/onlinerake) (survey weighting), applied to probability calibration instead of sample reweighting.
 
 ## License
 

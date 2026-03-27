@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "streamcal"
-version = "0.1.0"
-description = "Streaming probability calibration via multiplicative weights"
+version = "0.2.0"
+description = "Streaming probability calibration for ML models"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [{ name = "Gaurav Sood" }]
-keywords = ["calibration", "probability", "streaming", "machine-learning", "mwu"]
+keywords = ["calibration", "probability", "streaming", "machine-learning", "isotonic"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -26,14 +26,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/soodoku/mw-calibration"
-Repository = "https://github.com/soodoku/mw-calibration"
-Documentation = "https://soodoku.github.io/mw-calibration"
+Homepage = "https://github.com/finite-sample/streamcal"
+Repository = "https://github.com/finite-sample/streamcal"
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "mypy"]
 docs = ["sphinx", "furo", "myst-parser"]
-experiments = ["pandas", "matplotlib", "lightgbm"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/streamcal"]
