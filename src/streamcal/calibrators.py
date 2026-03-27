@@ -42,7 +42,7 @@ class PerBucketEMA(BaseCalibrator):
 
     def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         bucket_idx = np.clip(np.digitize(p_raw, self.bins) - 1, 0, self.n_buckets - 1)
-        return self.ema_rates[bucket_idx]  # type: ignore[return-value]
+        return self.ema_rates[bucket_idx]
 
     def update(
         self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
@@ -66,7 +66,7 @@ class PerBucketEMA(BaseCalibrator):
                         b
                     ] + self.alpha * batch_rates[b]
 
-        return self.ema_rates[bucket_idx]  # type: ignore[return-value]
+        return self.ema_rates[bucket_idx]
 
 
 class OnlineSGD(BaseCalibrator):
@@ -93,7 +93,7 @@ class OnlineSGD(BaseCalibrator):
         self, p_raw: NDArray[np.floating[Any]], theta: NDArray[np.floating[Any]]
     ) -> NDArray[np.floating[Any]]:
         c = np.exp(theta)
-        return (c * p_raw) / (1 - p_raw + c * p_raw)  # type: ignore[return-value]
+        return (c * p_raw) / (1 - p_raw + c * p_raw)  # type: ignore[no-any-return]
 
     def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         bucket_idx = np.clip(np.digitize(p_raw, self.bins) - 1, 0, self.n_buckets - 1)
@@ -149,7 +149,7 @@ class MWUCalibrator(BaseCalibrator):
         bucket_idx = np.clip(np.digitize(p_raw, self.bins) - 1, 0, self.n_buckets - 1)
         bias = self.weights[bucket_idx]
         p_cal = (bias * p_raw) / (1 - p_raw + bias * p_raw)
-        return np.clip(p_cal, 0, 1)  # type: ignore[return-value]
+        return np.clip(p_cal, 0, 1)  # type: ignore[no-any-return]
 
     def update(
         self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
@@ -176,7 +176,7 @@ class MWUCalibrator(BaseCalibrator):
         self.weights *= np.exp(-eta_t * errors)
         self.weights = np.clip(self.weights, self.c_min, self.c_max)
 
-        return p_cal  # type: ignore[return-value]
+        return p_cal  # type: ignore[no-any-return]
 
     def get_bucket_errors(
         self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]

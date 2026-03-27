@@ -27,13 +27,11 @@ class TemperatureScaling(BaseCalibrator):
         self.all_logits = []
         self.all_y = []
 
-    def calibrate(
-        self, p_raw: NDArray[np.floating[Any]]
-    ) -> NDArray[np.floating[Any]]:
+    def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         p_safe = np.clip(p_raw, EPS, 1 - EPS)
         logits = np.log(p_safe / (1 - p_safe))
         scaled_logits = logits / self.temperature
-        return 1 / (1 + np.exp(-scaled_logits))  # type: ignore[return-value]
+        return 1 / (1 + np.exp(-scaled_logits))  # type: ignore[no-any-return]
 
     def update(
         self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
@@ -59,7 +57,7 @@ class TemperatureScaling(BaseCalibrator):
         self.temperature = best_t
 
         scaled_logits = logits / self.temperature
-        return 1 / (1 + np.exp(-scaled_logits))  # type: ignore[return-value]
+        return 1 / (1 + np.exp(-scaled_logits))  # type: ignore[no-any-return]
 
 
 class IsotonicCalibrator(BaseCalibrator):
@@ -77,12 +75,10 @@ class IsotonicCalibrator(BaseCalibrator):
         self.all_y = []
         self.fitted = False
 
-    def calibrate(
-        self, p_raw: NDArray[np.floating[Any]]
-    ) -> NDArray[np.floating[Any]]:
+    def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         if not self.fitted:
             return p_raw.copy()
-        return self.iso.predict(p_raw)  # type: ignore[return-value]
+        return self.iso.predict(p_raw)  # type: ignore[no-any-return]
 
     def update(
         self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
@@ -96,7 +92,7 @@ class IsotonicCalibrator(BaseCalibrator):
         self.iso.fit(all_p, all_y)
         self.fitted = True
 
-        return self.iso.predict(p_raw)  # type: ignore[return-value]
+        return self.iso.predict(p_raw)  # type: ignore[no-any-return]
 
 
 class PlattScaling(BaseCalibrator):
@@ -117,14 +113,12 @@ class PlattScaling(BaseCalibrator):
         self.batch_count = 0
         self.fitted = False
 
-    def calibrate(
-        self, p_raw: NDArray[np.floating[Any]]
-    ) -> NDArray[np.floating[Any]]:
+    def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         if not self.fitted:
             return p_raw.copy()
         p_safe = np.clip(p_raw, EPS, 1 - EPS)
         logits = np.log(p_safe / (1 - p_safe)).reshape(-1, 1)
-        return self.model.predict_proba(logits)[:, 1]  # type: ignore[return-value]
+        return self.model.predict_proba(logits)[:, 1]  # type: ignore[no-any-return]
 
     def update(
         self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
@@ -144,4 +138,4 @@ class PlattScaling(BaseCalibrator):
         if not self.fitted:
             return p_raw.copy()
 
-        return self.model.predict_proba(logits.reshape(-1, 1))[:, 1]  # type: ignore[return-value]
+        return self.model.predict_proba(logits.reshape(-1, 1))[:, 1]  # type: ignore[no-any-return]
