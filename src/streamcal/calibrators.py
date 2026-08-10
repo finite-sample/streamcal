@@ -66,7 +66,9 @@ class StreamingIsotonicCalibrator(BaseCalibrator):
 
     def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         """Apply monotonic calibration via interpolation."""
-        return np.interp(p_raw, self.bucket_centers, self.calibration_values)
+        return np.interp(  # type: ignore[no-any-return]
+            p_raw, self.bucket_centers, self.calibration_values
+        )
 
     def update(
         self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
@@ -144,7 +146,9 @@ class NearlyIsotonicCalibrator(BaseCalibrator):
 
     def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         """Apply calibration via interpolation."""
-        return np.interp(p_raw, self.bucket_centers, self.calibration_values)
+        return np.interp(  # type: ignore[no-any-return]
+            p_raw, self.bucket_centers, self.calibration_values
+        )
 
     def _apply_nearly_isotonic(
         self, rates: NDArray[np.floating[Any]]
@@ -184,9 +188,9 @@ class NearlyIsotonicCalibrator(BaseCalibrator):
                     self.ema_rates[b] = batch_rate
                     self.has_seen[b] = True
                 else:
-                    self.ema_rates[b] = (
-                        1 - self.alpha
-                    ) * self.ema_rates[b] + self.alpha * batch_rate
+                    self.ema_rates[b] = (1 - self.alpha) * self.ema_rates[
+                        b
+                    ] + self.alpha * batch_rate
 
         self.calibration_values = self._apply_nearly_isotonic(self.ema_rates)
 

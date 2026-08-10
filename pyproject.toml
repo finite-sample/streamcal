@@ -33,6 +33,14 @@ Repository = "https://github.com/finite-sample/streamcal"
 dev = ["pytest", "ruff", "mypy"]
 docs = ["sphinx", "furo", "myst-parser"]
 
+[dependency-groups]
+test = [
+    "pytest",
+    # Monte Carlo test machinery. A dependency-group, not an extra: PyPI rejects
+    # direct URL references in published project metadata.
+    "simcheck @ git+https://github.com/finite-sample/simcheck",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/streamcal"]
 
