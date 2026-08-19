@@ -49,7 +49,7 @@ That's it. The calibrator:
 ```python
 from streamcal import brier_score, expected_calibration_error
 
-brier_score(y_true, y_pred)           # Lower is better
+brier_score(y_true, y_pred)  # Lower is better
 expected_calibration_error(y_true, y_pred)  # Lower is better
 ```
 

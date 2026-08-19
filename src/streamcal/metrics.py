@@ -1,6 +1,4 @@
-"""
-Calibration metrics.
-"""
+"""Calibration metrics."""
 
 from typing import Any
 
@@ -20,8 +18,7 @@ def expected_calibration_error(
     y_pred: NDArray[np.floating[Any]],
     n_bins: int = 20,
 ) -> float:
-    """
-    Expected Calibration Error (ECE).
+    """Expected Calibration Error (ECE).
 
     Weighted average of absolute calibration error across bins.
     """

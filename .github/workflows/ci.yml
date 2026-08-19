@@ -4,35 +4,23 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"  # weekly: surface ecosystem drift on quiet repos
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v7
-      - run: uv sync --extra dev --group test
-      - run: uv run ruff check src tests
-      - run: uv run ruff format --check src tests
-
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-      - run: uv sync --extra dev --group test
-      - run: uv run pytest tests/ -v
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v7
-      - run: uv sync --extra dev --group test
-      - run: uv run mypy src
+  ci:
+    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@v1
+    with:
+      # Canon's default matrix is ["3.11", "3.14"]; requires-python floors at
+      # 3.12, so the 3.11 leg cannot resolve.
+      python-versions: '["3.12", "3.14"]'
+      wheel-import: streamcal
+      coverage-floor: 96
+      run-preen: true
