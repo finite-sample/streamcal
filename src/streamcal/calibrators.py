@@ -1,12 +1,10 @@
-"""
-Streaming calibrators for probability calibration.
-"""
+"""Streaming calibrators for probability calibration."""
 
 from typing import Any
 
 import numpy as np
 from numpy.typing import NDArray
-from sklearn.isotonic import IsotonicRegression  # type: ignore[import-untyped]
+from sklearn.isotonic import IsotonicRegression
 
 
 class BaseCalibrator:
@@ -33,17 +31,16 @@ class StreamingIsotonicCalibrator(BaseCalibrator):
     Maintains exponential moving average of bucket outcome rates,
     then projects onto monotonic cone via PAV. Adapts quickly to
     drift while guaranteeing monotonicity.
-
-    Parameters
-    ----------
-    n_buckets : int
-        Number of buckets for discretizing probability space.
-    alpha : float
-        EMA smoothing factor. Larger values adapt faster to drift
-        but have more variance. Smaller values are more stable.
     """
 
     def __init__(self, n_buckets: int = 100, alpha: float = 0.1) -> None:
+        """Initialise the calibrator with an identity calibration map.
+
+        Args:
+            n_buckets: Number of buckets for discretizing probability space.
+            alpha: EMA smoothing factor. Larger values adapt faster to drift
+                but have more variance. Smaller values are more stable.
+        """
         self.n_buckets = n_buckets
         self.alpha = alpha
         self.bins: NDArray[np.floating[Any]] = np.linspace(0, 1, n_buckets + 1)
@@ -55,6 +52,7 @@ class StreamingIsotonicCalibrator(BaseCalibrator):
         self.calibration_values: NDArray[np.floating[Any]] = self.bucket_centers.copy()
 
     def reset(self) -> None:
+        """Discard learned rates and return to the identity calibration map."""
         self.ema_rates = self.bucket_centers.copy()
         self.has_seen = np.zeros(self.n_buckets, dtype=bool)
         self.calibration_values = self.bucket_centers.copy()
@@ -62,13 +60,11 @@ class StreamingIsotonicCalibrator(BaseCalibrator):
     def _pav(self, y: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         """Project onto monotonic cone via isotonic regression."""
         iso = IsotonicRegression(out_of_bounds="clip")
-        return iso.fit_transform(self.bucket_centers, y)  # type: ignore[no-any-return]
+        return iso.fit_transform(self.bucket_centers, y)
 
     def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         """Apply monotonic calibration via interpolation."""
-        return np.interp(  # type: ignore[no-any-return]
-            p_raw, self.bucket_centers, self.calibration_values
-        )
+        return np.interp(p_raw, self.bucket_centers, self.calibration_values)
 
     def update(
         self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
@@ -104,18 +100,6 @@ class NearlyIsotonicCalibrator(BaseCalibrator):
     This implementation maintains EMA estimates of bucket rates (like
     StreamingIsotonicCalibrator) but uses a soft penalty instead of PAV
     projection to encourage monotonicity.
-
-    Parameters
-    ----------
-    n_buckets : int
-        Number of buckets for discretizing probability space.
-    lam : float
-        Penalty strength. Larger values enforce monotonicity more strictly.
-        λ → ∞ recovers isotonic regression, λ = 0 is unconstrained.
-    alpha : float
-        EMA smoothing factor for bucket rate estimates.
-    eta : float
-        Learning rate for SGD monotonicity updates.
     """
 
     def __init__(
@@ -126,6 +110,17 @@ class NearlyIsotonicCalibrator(BaseCalibrator):
         eta: float = 0.01,
         n_iters: int = 100,
     ) -> None:
+        """Initialise the calibrator with an identity calibration map.
+
+        Args:
+            n_buckets: Number of buckets for discretizing probability space.
+            lam: Penalty strength. Larger values enforce monotonicity more
+                strictly. λ → ∞ recovers isotonic regression, λ = 0 is
+                unconstrained.
+            alpha: EMA smoothing factor for bucket rate estimates.
+            eta: Learning rate for SGD monotonicity updates.
+            n_iters: Number of gradient steps taken per ``update`` call.
+        """
         self.n_buckets = n_buckets
         self.lam = lam
         self.alpha = alpha
@@ -140,15 +135,14 @@ class NearlyIsotonicCalibrator(BaseCalibrator):
         self.calibration_values: NDArray[np.floating[Any]] = self.bucket_centers.copy()
 
     def reset(self) -> None:
+        """Discard learned rates and return to the identity calibration map."""
         self.ema_rates = self.bucket_centers.copy()
         self.has_seen = np.zeros(self.n_buckets, dtype=bool)
         self.calibration_values = self.bucket_centers.copy()
 
     def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
         """Apply calibration via interpolation."""
-        return np.interp(  # type: ignore[no-any-return]
-            p_raw, self.bucket_centers, self.calibration_values
-        )
+        return np.interp(p_raw, self.bucket_centers, self.calibration_values)
 
     def _apply_nearly_isotonic(
         self, rates: NDArray[np.floating[Any]]

@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
 
 [project]
 name = "streamcal"
@@ -8,17 +8,25 @@ version = "0.2.0"
 description = "Streaming probability calibration for ML models"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 authors = [{ name = "Gaurav Sood" }]
-keywords = ["calibration", "probability", "streaming", "machine-learning", "isotonic"]
+keywords = [
+    "calibration",
+    "probability",
+    "streaming",
+    "machine-learning",
+    "isotonic",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
 dependencies = [
     "numpy>=1.26",
@@ -28,31 +36,80 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/finite-sample/streamcal"
 Repository = "https://github.com/finite-sample/streamcal"
-
-[project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy"]
-docs = ["sphinx", "furo", "myst-parser"]
+Documentation = "https://finite-sample.github.io/streamcal/"
+Issues = "https://github.com/finite-sample/streamcal/issues"
 
 [dependency-groups]
 test = [
-    "pytest",
+    "pytest>=8",
+    "pytest-cov>=6",
     # Monte Carlo test machinery. A dependency-group, not an extra: PyPI rejects
     # direct URL references in published project metadata.
     "simcheck @ git+https://github.com/finite-sample/simcheck",
 ]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/streamcal"]
+docs = [
+    "sphinx>=8",
+    "furo",
+    "myst-parser",
+    "sphinx-copybutton",
+    "py-canon @ git+https://github.com/gojiplus/py-canon@v1",
+]
+dev = [
+    { include-group = "test" },
+    "ruff>=0.14",
+    "pyright>=1.1.390",
+    "pydoclint>=0.5",
+    "pre-commit>=4",
+]
 
 [tool.ruff]
 line-length = 88
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+external = ["DOC"]
+select = [
+    "E", "W", "F", "I", "B", "C4", "UP", "N", "D", "S", "SIM", "T20", "PT", "RUF",
+    "PTH", "RET", "PIE", "FURB", "PERF", "DTZ", "LOG", "G", "TC", "FLY",
+    "RSE", "SLOT", "FA", "A", "EXE", "ICN", "PGH", "PLE", "ARG", "SLF",
+]
+# D203/D213: the google convention the fleet standard picks. W191/D206/D300:
+# ruff's own docs list these as always incompatible with `ruff format`, which
+# the standard also runs.
+ignore = ["D203", "D213", "W191", "D206", "D300"]
 
-[tool.mypy]
-python_version = "3.12"
-warn_return_any = true
-warn_unused_configs = true
-strict = true
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Unused fixture arguments and private-member access are how tests are written.
+"tests/**" = ["S101", "D", "ARG", "SLF"]
+"docs/**" = ["D"]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "standard"
+
+[tool.pydoclint]
+style = "google"
+arg-type-hints-in-docstring = false
+check-return-types = false
+check-class-attributes = false
+allow-init-docstring = true
+exclude = '\.venv|tests|docs'
+
+[tool.codespell]
+# "retuned" is the intended word -- a test docstring talks about retuning the
+# distortion the study injects, not about anything being returned.
+ignore-words-list = "retuned"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# CI runs a bare `uv run pytest --cov`, which without this measures whatever
+# happens to be imported rather than the package.
+[tool.coverage.run]
+source = ["src"]
+
+[tool.uv.build-backend]
+module-name = "streamcal"
