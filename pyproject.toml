@@ -56,7 +56,7 @@ docs = [
 ]
 dev = [
     { include-group = "test" },
-    "ruff>=0.14",
+    "ruff>=0.16.4",
     "pyright>=1.1.390",
     "pydoclint>=0.5",
     "pre-commit>=4",
