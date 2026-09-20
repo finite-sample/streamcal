@@ -73,6 +73,28 @@ def test_composite_objective_selects_best_feasible_not_smallest():
         report.select(max_predict_ms=-1)
 
 
+@pytest.mark.parametrize("budget", [0, np.int64(0)])
+def test_zero_serialized_budget_returns_no_feasible_choice(budget):
+    report = compare_prequential(
+        [0.2, 0.8], [0, 1], {"raw": RawReference}, batch_size=1
+    )
+    assert report.select(max_serialized_bytes=budget) is None
+
+
+@pytest.mark.parametrize("budget", [False, True, 0.0, "0", -1, np.int64(-1)])
+def test_serialized_budget_rejects_invalid_types_and_negatives(budget):
+    report = compare_prequential(
+        [0.2, 0.8], [0, 1], {"raw": RawReference}, batch_size=1
+    )
+    error = (
+        ValueError
+        if isinstance(budget, (int, np.integer)) and budget < 0
+        else TypeError
+    )
+    with pytest.raises(error, match="max_serialized_bytes"):
+        report.select(max_serialized_bytes=budget)
+
+
 def test_delayed_event_order_has_expected_predictions():
     model = StreamingIsotonicCalibrator(n_bins=2, half_life_seconds=10, prior_weight=1)
     p = np.array([0.2, 0.8, 0.2])

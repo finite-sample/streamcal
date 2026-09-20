@@ -105,7 +105,7 @@ class TradeoffReport:
         Args:
             objective: ``brier``, ``log_loss``, or ``binned_calibration_error``.
             max_brier_degradation: Optional increase over the best Brier in this report.
-            max_serialized_bytes: Optional serialized-state budget in bytes.
+            max_serialized_bytes: Optional nonnegative integer state budget in bytes.
             max_update_ns_per_observation: Optional measured update-time limit.
             max_predict_ms: Maximum p95 prediction-call latency in milliseconds.
             max_update_ms: Maximum p95 update-call latency in milliseconds.
@@ -132,7 +132,12 @@ class TradeoffReport:
             if value is not None:
                 nonnegative_finite(value, name=name)
         if max_serialized_bytes is not None:
-            positive_integer(max_serialized_bytes, name="max_serialized_bytes")
+            if isinstance(max_serialized_bytes, bool) or not isinstance(
+                max_serialized_bytes, (int, np.integer)
+            ):
+                raise TypeError("max_serialized_bytes must be a nonnegative integer")
+            if max_serialized_bytes < 0:
+                raise ValueError("max_serialized_bytes must be a nonnegative integer")
         if max_update_ns_per_observation is not None:
             nonnegative_finite(
                 max_update_ns_per_observation, name="max_update_ns_per_observation"

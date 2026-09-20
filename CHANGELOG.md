@@ -5,6 +5,8 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Release tags match the version committed in `pyproject.toml`.
 
+## [Unreleased]
+
 ## [0.2.0] - 2026-09-20
 
 This release breaks the experimental 0.1 API. Predict with `calibrate` before
@@ -35,6 +37,7 @@ method-specific batch classes with `BatchCalibrator(method=...)` and
   every populated bucket equal influence.
 - Delegate temperature fitting to scikit-learn's public calibration API.
 - Use observation-weighted block-bootstrap intervals, including partial batches.
+- Return no feasible choice for a zero-byte state budget instead of raising.
 
 ### Changed
 
