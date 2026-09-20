@@ -120,6 +120,11 @@ ignore-words-list = "retuned"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+minversion = "8.0"
+log_level = "INFO"
+xfail_strict = true
+addopts = "-ra --strict-config --strict-markers"
+filterwarnings = ["error"]
 
 # CI runs a bare `uv run pytest --cov`, which without this measures whatever
 # happens to be imported rather than the package.

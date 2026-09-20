@@ -71,8 +71,9 @@ claim is fewer **retained historical records** for the same binned objective.
 
 The committed measurements are a recorded snapshot from
 [candidate 492bd39](https://github.com/finite-sample/streamcal/tree/492bd3986bab52dccc04d14f4d3a80a0a8ce096d).
-The release differs from that measured implementation only in accepting a
-zero-byte selection budget and documenting that boundary. None of the benchmark
+The release changes that measured source only to accept a zero-byte selection
+budget and document that boundary; its test settings also enforce strict
+configuration, markers, expected failures, and warnings. None of the benchmark
 configurations uses a zero-byte budget. The JSON fingerprints identify the
 measured snapshot, not the final release; they have not been relabeled.
 Check out that candidate to reproduce its implementation, or run the following

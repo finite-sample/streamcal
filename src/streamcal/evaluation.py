@@ -114,7 +114,8 @@ class TradeoffReport:
             Lowest-error feasible result, breaking ties by size then name, or None.
 
         Raises:
-            ValueError: If the objective is unknown.
+            ValueError: If the objective is unknown or a budget is negative.
+            TypeError: If the serialized-state budget is not an integer.
         """
         from streamcal._validation import nonnegative_finite
 
