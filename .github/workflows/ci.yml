@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@v1
+    uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@d30ecea5004bec9d1473fea556c82dce6daef981 # v1.3.0
     with:
       # Canon's default matrix is ["3.11", "3.14"]; requires-python floors at
       # 3.12, so the 3.11 leg cannot resolve.
