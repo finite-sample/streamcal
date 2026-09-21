@@ -29,7 +29,7 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "numpy>=1.26",
+    "numpy>=2.5.3",
     "scikit-learn>=1.8",
     "scipy>=1.11",
 ]
@@ -70,7 +70,7 @@ evidence = [
 ]
 dev = [
     { include-group = "test" },
-    "ruff>=0.16.5",
+    "ruff>=0.16.6",
     "pyright>=1.1.390",
     "pydoclint>=0.5",
     "pre-commit>=4",
