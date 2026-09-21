@@ -47,6 +47,7 @@ of passing assertions is not evidence that the assertions can fail.
 from __future__ import annotations
 
 import functools
+from functools import partial
 from statistics import NormalDist
 
 import numpy as np
@@ -54,12 +55,9 @@ import pytest
 from simcheck import assert_proportion, binomial_band, reps_for
 
 from streamcal import (
-    IsotonicCalibrator,
-    NearlyIsotonicCalibrator,
-    PlattScaling,
+    BatchCalibrator,
     StreamingIsotonicCalibrator,
-    TemperatureScaling,
-    expected_calibration_error,
+    binned_calibration_error,
 )
 
 # Evaluation sample for the exact calibration error. Large enough that the Monte
@@ -81,9 +79,9 @@ TEST_ALPHA = 0.05
 # alone -- which is exactly why the existing rank-preservation and monotonicity
 # tests cannot see them.
 #
-# "slope" is a pure temperature miscalibration, logit q = b logit p, so every
-# calibrator here is correctly specified for it, including the one-parameter
-# TemperatureScaling.
+# "slope" is a pure temperature miscalibration, logit q = b logit p.
+# Temperature scaling contains its inverse exactly; binned isotonic and sigmoid
+# on raw probability scores approximate it.
 #
 # "power" is q = p^gamma, which is not in the temperature family. It is included
 # because a study where every method is well specified cannot tell a method that
@@ -92,11 +90,10 @@ SLOPE = 0.5
 POWER = 0.6
 
 CALIBRATORS = {
-    "StreamingIsotonic": lambda: StreamingIsotonicCalibrator(n_buckets=50, alpha=0.3),
-    "NearlyIsotonic": lambda: NearlyIsotonicCalibrator(n_buckets=50, alpha=0.3),
-    "Isotonic": IsotonicCalibrator,
-    "Platt": PlattScaling,
-    "Temperature": TemperatureScaling,
+    "StreamingIsotonic": lambda: StreamingIsotonicCalibrator(n_bins=50, decay=0.7),
+    "Isotonic": BatchCalibrator,
+    "Sigmoid": partial(BatchCalibrator, "sigmoid"),
+    "Temperature": partial(BatchCalibrator, "temperature"),
 }
 
 
@@ -219,7 +216,7 @@ class _ShufflingCalibrator:
     """
 
     def __init__(self, seed=0):
-        self.inner = IsotonicCalibrator()
+        self.inner = BatchCalibrator()
         self.rng = np.random.default_rng(seed)
 
     def update(self, p_raw, y):
@@ -426,19 +423,10 @@ def test_calibration_reduces_the_true_calibration_error(name, kind):
 
     The nominal rate is 1.0, so the binomial band collapses to a point and this
     asks for improvement every single time rather than on average. That is the
-    right claim here because the margin is not marginal: the distortion costs
-    0.1067 (slope) or 0.1430 (power) of calibration error, and the fitted maps
-    average between 0.0049 and 0.0300, with no replicate above 0.0460. A
-    replicate that failed to improve at those distances would be a defect, not
-    bad luck.
-
-    The one exception is written down rather than smoothed over.
-    TemperatureScaling under the power distortion reduces the error from 0.1430
-    to 0.1381 -- it improves in every replicate, so this passes, but it removes
-    3.4% of the miscalibration where the others remove 79% to 92%. It has one
-    parameter and the distortion is not in its family.
-    ``test_temperature_scaling_barely_helps_outside_its_family`` pins that gap so
-    it cannot silently turn into a claim.
+    fixture-specific regression requirement for these large distortions and
+    fixed sample sizes, not a claim about all possible streams. Temperature
+    scaling only partially corrects the power distortion; the separate
+    family-misspecification test checks that limitation.
 
     Args:
         name: Which calibrator.
@@ -465,10 +453,9 @@ def test_calibration_does_not_damage_already_calibrated_input(name):
     good input, cannot clear this.
 
     **The damage must be smaller than the miscalibration it exists to remove.**
-    Fitting on already-calibrated data costs between 0.0079 and 0.0300 of
-    calibration error on average, and 0.0460 in the worst replicate, against the
-    0.1067 the slope distortion costs. Handing this package clean data and
-    letting it fit is a net loss of a few thousandths.
+    Compare against the slope distortion's error computed on this evaluation
+    set. This checks a tolerance for estimation noise, not exact preservation
+    of already-calibrated input.
 
     Args:
         name: Which calibrator.
@@ -488,17 +475,11 @@ def test_calibration_does_not_damage_already_calibrated_input(name):
     )
 
 
-def test_temperature_scaling_barely_helps_outside_its_family():
+def test_temperature_calibrator_barely_helps_outside_its_family():
     """A measured limitation, pinned so it cannot drift into a claim.
 
-    TemperatureScaling has one parameter and the power distortion is not a
+    Temperature scaling has one parameter and the power distortion is not a
     temperature shift, so it can only trade one miscalibration for a smaller one.
-    It removes 3.4% of the error, against 91.5% for Platt, 80.2% for isotonic and
-    79.4% for the streaming isotonic calibrator on the same streams. Nothing here
-    is broken -- the README lists it as a batch baseline -- but "it reduces
-    calibration error" is a true sentence that would badly misdescribe it, which
-    is why the reduction test above carries this footnote.
-
     The comparison is relative rather than against a threshold: temperature
     scaling must remove less than half of what the *weakest* other calibrator
     removes. That stays meaningful if the distortion is ever retuned.
@@ -594,8 +575,8 @@ def test_the_constant_calibrator_passes_a_calibration_in_the_large_check():
 # ---------------------------------------------------------------------------
 
 
-def test_binned_ece_charges_a_perfect_forecaster_for_noise():
-    """``expected_calibration_error`` is not zero on a perfectly calibrated one.
+def test_binned_error_charges_a_perfect_forecaster_for_noise():
+    """``binned_calibration_error`` is not zero on a perfectly calibrated one.
 
     The plugin estimator compares each bin's outcome rate to its mean forecast,
     and the outcome rate carries binomial noise of order 1/sqrt(bin count). It
@@ -614,8 +595,8 @@ def test_binned_ece_charges_a_perfect_forecaster_for_noise():
     p = rng.uniform(0.05, 0.95, 10_000)
     y = (rng.random(10_000) < p).astype(float)
 
-    coarse = expected_calibration_error(y, p, n_bins=5)
-    fine = expected_calibration_error(y, p, n_bins=200)
+    coarse = binned_calibration_error(y, p, n_bins=5)
+    fine = binned_calibration_error(y, p, n_bins=200)
 
     assert coarse > 0.0
     assert fine > 3.0 * coarse, (coarse, fine)

@@ -1,19 +1,27 @@
-"""streamcal: Streaming probability calibration with monotonicity guarantee."""
+"""Bounded-memory calibration for binary probability streams."""
 
 from importlib.metadata import version
 
-from streamcal.batch import IsotonicCalibrator, PlattScaling, TemperatureScaling
-from streamcal.calibrators import NearlyIsotonicCalibrator, StreamingIsotonicCalibrator
-from streamcal.metrics import brier_score, expected_calibration_error
+from streamcal.batch import BatchCalibrator
+from streamcal.calibrators import CalibratorDiagnostics, StreamingIsotonicCalibrator
+from streamcal.evaluation import (
+    ConfigurationResult,
+    StreamingIsotonicConfig,
+    TradeoffReport,
+    compare_prequential,
+)
+from streamcal.metrics import binned_calibration_error, brier_score
 
 __version__ = version("streamcal")
 
 __all__ = [
-    "IsotonicCalibrator",
-    "NearlyIsotonicCalibrator",
-    "PlattScaling",
+    "BatchCalibrator",
+    "CalibratorDiagnostics",
+    "ConfigurationResult",
     "StreamingIsotonicCalibrator",
-    "TemperatureScaling",
+    "StreamingIsotonicConfig",
+    "TradeoffReport",
+    "binned_calibration_error",
     "brier_score",
-    "expected_calibration_error",
+    "compare_prequential",
 ]

@@ -1,156 +1,169 @@
-"""Batch calibrators that refit on accumulated data."""
+"""History and refit policies around scikit-learn's public calibration API."""
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Self
 
 import numpy as np
-from numpy.typing import NDArray
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.frozen import FrozenEstimator
 from sklearn.isotonic import IsotonicRegression
-from sklearn.linear_model import LogisticRegression
 
+from streamcal._validation import paired_binary_data, positive_integer
+from streamcal._validation import probabilities as validate_probabilities
 from streamcal.calibrators import BaseCalibrator
 
-EPS = 1e-15
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+
+    from numpy.typing import ArrayLike, NDArray
 
 
-class TemperatureScaling(BaseCalibrator):
-    """Temperature scaling calibrator (batch refit every batch)."""
+class _CalibrationRows:
+    """Route all rows to a frozen score adapter without retaining index arrays."""
 
-    def __init__(self) -> None:
-        """Start at temperature 1, i.e. an identity calibration map."""
-        self.temperature = 1.0
-        self.all_logits: list[NDArray[np.floating[Any]]] = []
-        self.all_y: list[NDArray[np.floating[Any]]] = []
+    def get_n_splits(self, X=None, y=None, groups=None):  # noqa: N803, ARG002
+        return 1
 
-    def reset(self) -> None:
-        """Forget the accumulated history and return to temperature 1."""
-        self.temperature = 1.0
-        self.all_logits = []
-        self.all_y = []
-
-    def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
-        """Divide the logits by the fitted temperature and re-apply the sigmoid."""
-        p_safe = np.clip(p_raw, EPS, 1 - EPS)
-        logits = np.log(p_safe / (1 - p_safe))
-        scaled_logits = logits / self.temperature
-        return 1 / (1 + np.exp(-scaled_logits))
-
-    def update(
-        self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
-    ) -> NDArray[np.floating[Any]]:
-        """Add the batch to the history and refit the temperature by grid search."""
-        p_safe = np.clip(p_raw, EPS, 1 - EPS)
-        logits = np.log(p_safe / (1 - p_safe))
-        self.all_logits.append(logits)
-        self.all_y.append(y)
-
-        all_logits = np.concatenate(self.all_logits)
-        all_y = np.concatenate(self.all_y)
-
-        best_t = 1.0
-        best_loss = float("inf")
-        for t in np.logspace(-1, 1, 50):
-            probs = 1 / (1 + np.exp(-all_logits / t))
-            probs = np.clip(probs, EPS, 1 - EPS)
-            loss = -np.mean(all_y * np.log(probs) + (1 - all_y) * np.log(1 - probs))
-            if loss < best_loss:
-                best_loss = loss
-                best_t = float(t)
-
-        self.temperature = best_t
-
-        scaled_logits = logits / self.temperature
-        return 1 / (1 + np.exp(-scaled_logits))
+    def split(self, X, y=None, groups=None) -> Iterator:  # noqa: N803, ARG002
+        indices = np.arange(len(X))
+        yield indices, indices
 
 
-class IsotonicCalibrator(BaseCalibrator):
-    """Isotonic regression calibrator (batch refit every batch)."""
+class ProbabilityClassifier(ClassifierMixin, BaseEstimator):
+    """Expose supplied binary probabilities as an already-fitted classifier.
+
+    Sigmoid fits on probabilities; temperature uses scikit-learn's
+    log-probability convention. This adapter does not learn a base model.
+    """
 
     def __init__(self) -> None:
-        """Start unfitted, passing raw probabilities through unchanged."""
-        self.iso = IsotonicRegression(out_of_bounds="clip")
-        self.all_p: list[NDArray[np.floating[Any]]] = []
-        self.all_y: list[NDArray[np.floating[Any]]] = []
-        self.fitted = False
+        """Declare the fixed binary class order."""
+        self.classes_ = np.array([0, 1])
+        self.n_features_in_ = 1
 
-    def reset(self) -> None:
-        """Forget the accumulated history and drop back to the unfitted state."""
-        self.iso = IsotonicRegression(out_of_bounds="clip")
-        self.all_p = []
-        self.all_y = []
-        self.fitted = False
+    def fit(self, X: ArrayLike, y: ArrayLike | None = None) -> Self:  # noqa: N803, ARG002
+        """Return this stateless adapter unchanged."""
+        return self
 
-    def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
-        """Map raw probabilities through the fitted isotonic curve."""
-        if not self.fitted:
-            return p_raw.copy()
-        return self.iso.predict(p_raw)
+    def predict(self, X: ArrayLike) -> NDArray[np.int64]:  # noqa: N803
+        """Return the most probable binary class."""
+        return np.argmax(self.predict_proba(X), axis=1)
 
-    def update(
-        self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
-    ) -> NDArray[np.floating[Any]]:
-        """Add the batch to the history and refit isotonic regression on all of it."""
-        self.all_p.append(p_raw)
-        self.all_y.append(y)
-
-        all_p = np.concatenate(self.all_p)
-        all_y = np.concatenate(self.all_y)
-
-        self.iso.fit(all_p, all_y)
-        self.fitted = True
-
-        return self.iso.predict(p_raw)
+    def predict_proba(self, X: ArrayLike) -> NDArray[np.float64]:  # noqa: N803
+        """Return class-zero and class-one probabilities in that order."""
+        values = np.asarray(X, dtype=float)
+        if values.ndim != 2 or values.shape[1] != 1:
+            raise ValueError("X must have shape (n_observations, 1)")
+        p = validate_probabilities(values[:, 0])
+        return np.column_stack((1.0 - p, p))
 
 
-class PlattScaling(BaseCalibrator):
-    """Platt scaling calibrator (batch refit every k batches)."""
+class BatchCalibrator(BaseCalibrator):
+    """Refit an upstream calibrator on an accumulating or rolling history.
 
-    def __init__(self, refit_every: int = 1) -> None:
-        """Start unfitted.
+    Both-class readiness is required. A one-class window retains the preceding
+    fitted map, or identity if no fit has succeeded.
+    """
+
+    def __init__(
+        self,
+        method: str = "isotonic",
+        *,
+        window_size: int | None = None,
+        refit_every: int = 1,
+    ) -> None:
+        """Configure the upstream method and observation retention policy.
 
         Args:
-            refit_every: Refit the logistic model once every this many batches.
-                The accumulated history is still extended on every batch.
+            method: One of ``isotonic``, ``sigmoid``, or ``temperature``.
+            window_size: Maximum retained observations, or all history if None.
+            refit_every: Number of update calls between refits.
+
+        Raises:
+            ValueError: If the method is unknown.
         """
-        self.refit_every = refit_every
-        self.model = LogisticRegression(solver="lbfgs", max_iter=200)
-        self.all_logits: list[NDArray[np.floating[Any]]] = []
-        self.all_y: list[NDArray[np.floating[Any]]] = []
-        self.batch_count = 0
-        self.fitted = False
+        if method not in ("isotonic", "sigmoid", "temperature"):
+            raise ValueError("method must be isotonic, sigmoid, or temperature")
+        self.method = method
+        self.window_size = (
+            None
+            if window_size is None
+            else positive_integer(window_size, name="window_size")
+        )
+        self.refit_every = positive_integer(refit_every, name="refit_every")
+        self.reset()
 
-    def reset(self) -> None:
-        """Forget the accumulated history and drop back to the unfitted state."""
-        self.model = LogisticRegression(solver="lbfgs", max_iter=200)
-        self.all_logits = []
-        self.all_y = []
-        self.batch_count = 0
-        self.fitted = False
+    def reset(self) -> Self:
+        """Discard history and the fitted map."""
+        self._probabilities = np.empty(0)
+        self._outcomes = np.empty(0)
+        self._model: CalibratedClassifierCV | IsotonicRegression | None = None
+        self.n_updates = 0
+        self.n_observations = 0
+        self.frozen = False
+        return self
 
-    def calibrate(self, p_raw: NDArray[np.floating[Any]]) -> NDArray[np.floating[Any]]:
-        """Map raw probabilities through the fitted logistic model."""
-        if not self.fitted:
-            return p_raw.copy()
-        p_safe = np.clip(p_raw, EPS, 1 - EPS)
-        logits = np.log(p_safe / (1 - p_safe)).reshape(-1, 1)
-        return self.model.predict_proba(logits)[:, 1]
+    def freeze(self) -> Self:
+        """Keep the fitted map, discard raw history, and ignore future updates."""
+        if not self.is_ready:
+            raise ValueError("cannot freeze before a successful fit")
+        self._probabilities = np.empty(0)
+        self._outcomes = np.empty(0)
+        self.frozen = True
+        return self
 
-    def update(
-        self, p_raw: NDArray[np.floating[Any]], y: NDArray[np.floating[Any]]
-    ) -> NDArray[np.floating[Any]]:
-        """Add the batch to the history, refitting on every ``refit_every``-th call."""
-        self.batch_count += 1
-        p_safe = np.clip(p_raw, EPS, 1 - EPS)
-        logits = np.log(p_safe / (1 - p_safe))
-        self.all_logits.append(logits)
-        self.all_y.append(y)
+    @property
+    def is_ready(self) -> bool:
+        """Return whether an upstream fit has succeeded."""
+        return self._model is not None
 
-        if self.batch_count % self.refit_every == 0:
-            all_logits = np.concatenate(self.all_logits).reshape(-1, 1)
-            all_y = np.concatenate(self.all_y)
-            self.model.fit(all_logits, all_y)
-            self.fitted = True
+    @property
+    def history_bytes(self) -> int:
+        """Return retained input-array bytes, excluding the fitted model."""
+        return self._probabilities.nbytes + self._outcomes.nbytes
 
-        if not self.fitted:
-            return p_raw.copy()
+    @property
+    def retained_observations(self) -> int:
+        """Return the number of outcomes available for the next refit."""
+        return self._outcomes.size
 
-        return self.model.predict_proba(logits.reshape(-1, 1))[:, 1]
+    def calibrate(self, probabilities: ArrayLike) -> NDArray[np.float64]:
+        """Apply the last completed fit, or identity before readiness."""
+        p = validate_probabilities(probabilities)
+        if self._model is None:
+            return p.copy()
+        if isinstance(self._model, IsotonicRegression):
+            return self._model.predict(p)
+        return self._model.predict_proba(p[:, None])[:, 1]
+
+    def update(self, probabilities: ArrayLike, outcomes: ArrayLike) -> Self:
+        """Retain new observations and refit at the configured cadence."""
+        p, y = paired_binary_data(probabilities, outcomes)
+        if self.frozen:
+            return self
+        retained_p = np.concatenate((self._probabilities, p))
+        retained_y = np.concatenate((self._outcomes, y))
+        if self.window_size is not None:
+            retained_p = retained_p[-self.window_size :].copy()
+            retained_y = retained_y[-self.window_size :].copy()
+        model = self._model
+        if (self.n_updates + 1) % self.refit_every == 0 and np.unique(
+            retained_y
+        ).size == 2:
+            if self.method == "isotonic":
+                model = IsotonicRegression(
+                    y_min=0.0, y_max=1.0, out_of_bounds="clip"
+                ).fit(retained_p, retained_y)
+            else:
+                model = CalibratedClassifierCV(
+                    FrozenEstimator(ProbabilityClassifier()),
+                    method=self.method,
+                    cv=_CalibrationRows(),
+                ).fit(retained_p[:, None], retained_y)
+        self._probabilities, self._outcomes = retained_p, retained_y
+        self._model = model
+        self.n_updates += 1
+        self.n_observations += p.size
+        return self
