@@ -1,31 +1,38 @@
 API Reference
 =============
 
-Streaming Calibration
+Streaming calibration
 ---------------------
 
 .. autoclass:: streamcal.StreamingIsotonicCalibrator
    :members:
-   :undoc-members:
 
-Batch Calibration
------------------
-
-.. autoclass:: streamcal.IsotonicCalibrator
+.. autoclass:: streamcal.CalibratorDiagnostics
    :members:
-   :undoc-members:
 
-.. autoclass:: streamcal.TemperatureScaling
+Batch references
+----------------
+
+.. autoclass:: streamcal.BatchCalibrator
    :members:
-   :undoc-members:
 
-.. autoclass:: streamcal.PlattScaling
+Trade-off evaluation
+--------------------
+
+.. autofunction:: streamcal.compare_prequential
+
+.. autoclass:: streamcal.StreamingIsotonicConfig
    :members:
-   :undoc-members:
 
-Metrics
--------
+.. autoclass:: streamcal.TradeoffReport
+   :members:
+
+.. autoclass:: streamcal.ConfigurationResult
+   :members:
+
+Diagnostics
+-----------
 
 .. autofunction:: streamcal.brier_score
 
-.. autofunction:: streamcal.expected_calibration_error
+.. autofunction:: streamcal.binned_calibration_error
