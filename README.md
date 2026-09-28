@@ -182,3 +182,15 @@ make evidence
 ## License
 
 MIT
+
+<!-- adjacent:start -->
+
+## 🔗 Adjacent Repositories
+
+- [finite-sample/optimal-classification-cutoffs](https://github.com/finite-sample/optimal-classification-cutoffs) — Cutoffs for max. multiclass F1-score, etc.
+- [finite-sample/calibre](https://github.com/finite-sample/calibre) — Advanced Calibration Models
+- [finite-sample/rank-preserving-calibration](https://github.com/finite-sample/rank-preserving-calibration) — Rank preserving calibration of multiclass prob.
+
+_Powered by [Adjacent](https://github.com/gojiplus/adjacent)_
+
+<!-- adjacent:end -->
