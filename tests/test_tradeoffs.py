@@ -1,5 +1,6 @@
 """Expected outcomes for scheduling, constrained selection and uncertainty."""
 
+import time
 from dataclasses import replace
 from functools import partial
 
@@ -130,6 +131,30 @@ def test_methods_receive_identical_available_labels_and_sparse_mask():
     assert report.results[0].squared_errors == report.results[1].squared_errors
     expected = [("predict", (0.2,)), ("predict", (0.8,)), ("update", (0.8,))]
     assert [expected, expected] == TRACE_LOGS
+
+
+class SlowUpdater(RawReference):
+    def update(self, probabilities, outcomes):
+        time.sleep(0.002)
+        return self
+
+
+@pytest.mark.parametrize(
+    "timing",
+    [{"batch_size": 1}, {"batch_size": 1, "prediction_times": np.arange(40)}],
+)
+def test_update_latency_ignores_masked_batches(timing):
+    # One observed label in forty: skipped batches must not count as updates.
+    mask = np.zeros(40, dtype=bool)
+    mask[20] = True
+    report = compare_prequential(
+        np.full(40, 0.5),
+        np.tile([0, 1], 20),
+        {"slow": SlowUpdater},
+        observe_mask=mask,
+        **timing,
+    )
+    assert report.results[0].p95_update_ms >= 2.0
 
 
 def test_paired_bootstrap_preserves_constant_expected_difference():
