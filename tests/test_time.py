@@ -88,7 +88,8 @@ def test_rolling_reference_matches_only_retained_window():
     direct = BatchCalibrator().update(p[-8:], y[-8:])
     assert np.array_equal(rolling.calibrate(p), direct.calibrate(p))
     assert rolling.retained_observations == 8
-    assert rolling.history_bytes == 8 * 16
+    # Eight float64 probabilities and eight one-byte labels.
+    assert rolling.history_bytes == 8 * (8 + 1)
     assert rolling.n_observations == 20
 
 

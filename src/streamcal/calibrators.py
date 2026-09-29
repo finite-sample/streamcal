@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 import numpy as np
-from sklearn.isotonic import IsotonicRegression
 
 from streamcal._validation import (
     nonnegative_finite,
@@ -19,6 +18,79 @@ from streamcal._validation import probabilities as validate_probabilities
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
+
+
+def _grid_index(values: NDArray[np.float64], grid: NDArray[np.float64]) -> NDArray:
+    """Locate ``values`` on an evenly spaced grid without a binary search.
+
+    Returns ``j`` with ``grid[j] <= value < grid[j + 1]``, clipped to
+    ``[0, grid.size - 2]``: exactly what ``np.searchsorted(grid, values,
+    "right") - 1`` gives after clipping. The spacing makes ``j`` computable
+    directly; one comparison with each neighbour then corrects the rounding
+    of that computation, so the result never depends on it. That replaces
+    ``O(log n)`` comparisons per value with ``O(1)``.
+
+    Args:
+        values: Points to locate, each within one grid spacing of ``grid``.
+        grid: Evenly spaced, increasing grid of at least two points.
+
+    Returns:
+        Interval index of each value.
+    """
+    last = grid.size - 2
+    index = (values - grid[0]) * ((grid.size - 1) / (grid[-1] - grid[0]))
+    index = np.clip(index, 0, last).astype(np.intp)
+    index -= (values < grid[index]) & (index > 0)
+    index += (values >= grid[index + 1]) & (index < last)
+    return index
+
+
+def _grid_interp(
+    values: NDArray[np.float64], grid: NDArray[np.float64], fitted: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """``np.interp(values, grid, fitted)`` for an evenly spaced ``grid``.
+
+    Finds each interval with :func:`_grid_index` instead of a binary search,
+    then evaluates the same expression ``np.interp`` does, so the result is
+    the same to the last bit.
+
+    Args:
+        values: Points to interpolate at.
+        grid: Evenly spaced, increasing grid of at least two points.
+        fitted: Values at the grid points.
+
+    Returns:
+        Interpolated values, held constant beyond either end of the grid.
+    """
+    index = _grid_index(values, grid)
+    slopes = (fitted[1:] - fitted[:-1]) / (grid[1:] - grid[:-1])
+    result = slopes[index] * (values - grid[index]) + fitted[index]
+    result[values < grid[0]] = fitted[0]
+    result[values >= grid[-1]] = fitted[-1]
+    return result
+
+
+# Batch sizes from which the grid kernels beat NumPy's binary searches. Below
+# them, NumPy's lower fixed cost wins. Both paths give identical results, so
+# the switch changes speed only. Measured with ``benchmarks.speed``.
+_GRID_INDEX_FROM = 1024
+_GRID_INTERP_FROM = 2048
+
+
+def _bin_index(values: NDArray[np.float64], edges: NDArray[np.float64]) -> NDArray:
+    """Bin of each value: ``clip(digitize(values, edges) - 1, 0, n_bins - 1)``."""
+    if values.size >= _GRID_INDEX_FROM:
+        return _grid_index(values, edges)
+    return np.clip(np.digitize(values, edges) - 1, 0, edges.size - 2)
+
+
+def _interpolate(
+    values: NDArray[np.float64], grid: NDArray[np.float64], fitted: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """``np.interp(values, grid, fitted)``, using the grid kernel for large inputs."""
+    if values.size >= _GRID_INTERP_FROM and grid.size >= 2:
+        return _grid_interp(values, grid, fitted)
+    return np.interp(values, grid, fitted)
 
 
 @dataclass(frozen=True)
@@ -144,11 +216,7 @@ class StreamingIsotonicCalibrator(BaseCalibrator):
             values = self._fit_values(
                 self.effective_counts * factor, self.positive_mass * factor
             )
-        return np.interp(
-            probability_array,
-            self.bin_centers,
-            values,
-        )
+        return _interpolate(probability_array, self.bin_centers, values)
 
     def update(
         self,
@@ -188,11 +256,7 @@ class StreamingIsotonicCalibrator(BaseCalibrator):
             weights = np.exp2(-(float(observed_at) - times) / self.half_life_seconds)
         elif prediction_times is not None:
             raise ValueError("prediction_times requires half_life_seconds")
-        indices = np.clip(
-            np.digitize(probability_array, self.bin_edges) - 1,
-            0,
-            self.n_bins - 1,
-        )
+        indices = _bin_index(probability_array, self.bin_edges)
 
         self.effective_counts *= factor
         self.positive_mass *= factor
@@ -263,12 +327,14 @@ class StreamingIsotonicCalibrator(BaseCalibrator):
         if not np.any(active):
             return self.bin_centers.copy()
 
+        # Imported here so that importing streamcal does not load scipy.optimize.
+        from scipy.optimize import isotonic_regression
+
         numerator = positive_mass + self.prior_weight * self.bin_centers
         rates = numerator[active] / total_weights[active]
-        model = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
-        model.fit(
-            self.bin_centers[active],
-            rates,
-            sample_weight=total_weights[active],
-        )
-        return model.predict(self.bin_centers)
+        fitted = isotonic_regression(rates, weights=total_weights[active]).x
+        np.clip(fitted, 0.0, 1.0, out=fitted)
+        if active.all():
+            return fitted
+        # Bins with no weight take values interpolated from their neighbours.
+        return np.interp(self.bin_centers, self.bin_centers[active], fitted)

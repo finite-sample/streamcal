@@ -50,8 +50,9 @@ $$
 $$
 
 Each target is the bin's observed positive rate, shrunk toward the bin center.
-Streamcal passes these weights and targets to scikit-learn's
-`IsotonicRegression`; it does not implement the isotonic solver. A bin with
+Streamcal passes these weights and targets to SciPy's
+`scipy.optimize.isotonic_regression`; it does not implement the isotonic
+solver. A bin with
 zero weight (possible only when $\lambda = 0$) is left out of the fit, and its
 value is interpolated from its neighbours. A raw-history implementation has to
 use the same convention for the two to agree, because the objective leaves
@@ -106,20 +107,24 @@ $$
 $$
 
 or 808 bytes at $B = 20$, however many observations $H$ it has seen. Keeping
-the raw history instead takes $16H$ bytes (a float64 probability and label per
-observation), before counting the fitted model, and a rolling window of $W$
-observations takes $16W$ bytes. These figures cover the numerical arrays only,
+the raw history instead, as `BatchCalibrator` does, takes $9H$ bytes (a float64
+probability and a one-byte label per observation), before counting the fitted
+model, and a rolling window of $W$ observations takes $9W$ bytes. These figures cover the numerical arrays only,
 not Python objects or the interpreter.
 
 An update with a batch of $m$ labels costs
 
 | Step | Work |
 |---|---|
-| Find each label's bin | $O(m \log B)$ |
+| Find each label's bin | $O(m)$ |
 | Decay and accumulate $N_b$, $S_b$ | $O(m + B)$ |
-| Refit on $B$ aggregated bins | $O(B \log B)$ |
+| Refit on $B$ aggregated bins | $O(B)$ |
 
-so $O(m \log B + B \log B)$ time and $O(m + B)$ temporary memory in total.
+so $O(m + B)$ time and $O(m + B)$ temporary memory in total. Because the bins
+are evenly spaced, a label's bin is computed directly rather than searched
+for; batches under 1,024 labels use a binary search instead, $O(m \log B)$,
+which is faster at that size and gives the same bins. The bins are already in
+order, so the pool-adjacent-violators refit runs in linear time.
 Neither depends on $H$. Calibrating interpolates against $B$ centers; in
 half-life mode it also refits the $B$ bins for the elapsed time.
 

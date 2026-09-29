@@ -15,7 +15,7 @@ fixed-size per-bin sufficient statistics, can forget stale history, and makes
 the prediction-before-observation order explicit so a forecast never uses its
 own outcome.
 
-The numerical fit is scikit-learn's weighted isotonic regression. Streamcal adds
+The numerical fit is SciPy's weighted isotonic regression. Streamcal adds
 the compact streaming state, prediction-age forgetting, and evaluation needed
 to choose a quality/resource operating point.
 
