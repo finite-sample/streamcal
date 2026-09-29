@@ -7,6 +7,12 @@ Release tags match the version committed in `pyproject.toml`.
 
 ## [Unreleased]
 
+### Fixed
+
+- `compare_prequential` no longer times batches with no observed labels as
+  zero-cost updates, which understated `p95_update_ms` under a sparse
+  `observe_mask`.
+
 ## [0.2.0] - 2026-09-20
 
 This release breaks the experimental 0.1 API. Predict with `calibrate` before

@@ -352,14 +352,16 @@ def compare_prequential(
             cumulative_observations += calibrated.size
             cumulative_scores.append(cumulative_squared_error / cumulative_observations)
 
-            before = perf_counter_ns()
+            # Only calls that update are timed: counting masked-out batches as
+            # zero-cost updates would drag the p95 toward zero.
             batch_mask = mask[start:stop]
             if np.any(batch_mask):
+                before = perf_counter_ns()
                 calibrator.update(
                     batch_probabilities[batch_mask], batch_outcomes[batch_mask]
                 )
-            update_calls.append(perf_counter_ns() - before)
-            update_ns += update_calls[-1]
+                update_calls.append(perf_counter_ns() - before)
+                update_ns += update_calls[-1]
 
         if times is not None:
             calibrated_all, predict_calls, update_calls = _run_delayed(
