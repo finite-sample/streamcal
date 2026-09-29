@@ -10,8 +10,6 @@ Timings are medians of repeated calls with BLAS pinned to one thread. They
 describe this machine; compare two commits by running both here.
 """
 
-from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -21,23 +19,6 @@ import sys
 import time
 from functools import partial
 from pathlib import Path
-
-import numpy as np
-
-IMPORT_PROBE = """
-import resource, sys, time
-sys.path.insert(0, {src!r})
-start = time.perf_counter()
-import streamcal
-from streamcal import StreamingIsotonicCalibrator
-seconds = time.perf_counter() - start
-first = time.perf_counter()
-StreamingIsotonicCalibrator().update([0.2, 0.8], [0, 1])
-first_update = time.perf_counter() - first
-rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-scale = 1 if sys.platform == "darwin" else 1024
-print(seconds, first_update, rss * scale, "sklearn" in sys.modules)
-"""
 
 
 def median_us(call, repeats):
@@ -50,25 +31,53 @@ def median_us(call, repeats):
     return statistics.median(samples) / 1e3
 
 
-def import_cost(src, runs=7):
-    """Median import time, first-update time and peak RSS in fresh processes."""
-    rows = []
-    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
-    for _ in range(runs):
-        output = subprocess.run(  # noqa: S603 - fixed interpreter and probe
-            [sys.executable, "-c", IMPORT_PROBE.format(src=src)],
-            capture_output=True,
-            text=True,
-            check=True,
-            env=env,
-        ).stdout.split()
-        rows.append(output)
+def probe_import(src):
+    """Time ``import streamcal`` and its first update in this (fresh) process.
+
+    Import time only means something in a process that has not imported
+    anything yet, so :func:`import_cost` runs this in a new interpreter each
+    time, through ``--probe-import``. That is also why this module imports
+    NumPy inside :func:`main` rather than at the top.
+    """
+    import resource
+
+    sys.path.insert(0, src)
+    start = time.perf_counter()
+    from streamcal import StreamingIsotonicCalibrator
+
+    imported = time.perf_counter()
+    StreamingIsotonicCalibrator().update([0.2, 0.8], [0, 1])
+    updated = time.perf_counter()
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return {
-        "import_ms": statistics.median(float(r[0]) for r in rows) * 1e3,
-        "first_update_ms": statistics.median(float(r[1]) for r in rows) * 1e3,
-        "peak_rss_mb": statistics.median(float(r[2]) for r in rows) / 2**20,
-        "imports_sklearn": rows[0][3] == "True",
+        "import_ms": (imported - start) * 1e3,
+        "first_update_ms": (updated - imported) * 1e3,
+        # ru_maxrss is bytes on macOS and kilobytes on Linux.
+        "peak_rss_mb": peak * (1 if sys.platform == "darwin" else 1024) / 2**20,
+        "imports_sklearn": "sklearn" in sys.modules,
     }
+
+
+def import_cost(src, runs=7):
+    """Median of :func:`probe_import` over fresh interpreters."""
+    env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+    command = [sys.executable, "-m", "benchmarks.speed", "--probe-import"]
+    rows = [
+        json.loads(
+            subprocess.run(  # noqa: S603 - this script, run by the same interpreter
+                [*command, "--src", src],
+                capture_output=True,
+                text=True,
+                check=True,
+                env=env,
+            ).stdout
+        )
+        for _ in range(runs)
+    ]
+    return {
+        key: statistics.median(row[key] for row in rows)
+        for key in ("import_ms", "first_update_ms", "peak_rss_mb")
+    } | {"imports_sklearn": rows[0]["imports_sklearn"]}
 
 
 def main():
@@ -76,7 +85,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--src", default=str(Path("src").resolve()))
     parser.add_argument("--output")
+    parser.add_argument("--probe-import", action="store_true", help="internal")
     args = parser.parse_args()
+    if args.probe_import:
+        print(json.dumps(probe_import(args.src)))
+        return
+    # Probe imports before this process loads anything heavy: on Linux a child's
+    # peak-memory counter starts from the parent's size when it is forked.
+    results = {"import": import_cost(args.src)}
+    import numpy as np
+
     sys.path.insert(0, args.src)
     from streamcal import (
         BatchCalibrator,
@@ -85,7 +103,6 @@ def main():
     )
 
     rng = np.random.default_rng(0)
-    results = {"import": import_cost(args.src)}
     for bins in (20, 100, 1000):
         for size in (1, 100, 10_000):
             p = rng.uniform(0, 1, size)

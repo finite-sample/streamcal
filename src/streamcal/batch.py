@@ -20,18 +20,6 @@ if TYPE_CHECKING:
     from numpy.typing import ArrayLike, NDArray
 
 
-def _drop_head[T: np.generic](chunk: NDArray[T], count: int) -> NDArray[T]:
-    """Drop the first ``count`` rows of a history chunk.
-
-    A slice keeps its whole parent array alive, so once the kept part is under
-    half of the parent it is copied and the dropped rows are freed.
-    """
-    kept = chunk[count:]
-    if kept.base is not None and 2 * kept.size < kept.base.size:
-        kept = kept.copy()
-    return kept
-
-
 class _CalibrationRows:
     """Route all rows to a frozen score adapter without retaining index arrays."""
 
@@ -109,7 +97,10 @@ class BatchCalibrator(BaseCalibrator):
 
     def reset(self) -> Self:
         """Discard history and the fitted map."""
-        self._clear_history()
+        self._probabilities = np.empty(0)
+        # Labels are 0 or 1, so one byte each is enough: 9 rather than 16
+        # bytes of history per observation. Fits convert them back to float.
+        self._outcomes = np.empty(0, dtype=np.uint8)
         self._model: CalibratedClassifierCV | IsotonicRegression | None = None
         self.n_updates = 0
         self.n_observations = 0
@@ -120,47 +111,10 @@ class BatchCalibrator(BaseCalibrator):
         """Keep the fitted map, discard raw history, and ignore future updates."""
         if not self.is_ready:
             raise ValueError("cannot freeze before a successful fit")
-        self._clear_history()
+        self._probabilities = np.empty(0)
+        self._outcomes = np.empty(0, dtype=np.uint8)
         self.frozen = True
         return self
-
-    def _clear_history(self) -> None:
-        # History is kept as a list of per-update chunks, joined only when a
-        # refit needs it, so an update that does not refit costs O(batch)
-        # rather than copying all history. Labels are stored as one byte each.
-        self._probability_chunks: list[NDArray[np.float64]] = []
-        self._outcome_chunks: list[NDArray[np.uint8]] = []
-        self._retained = 0
-
-    def _append(self, p: NDArray[np.float64], y: NDArray[np.float64]) -> None:
-        self._probability_chunks.append(p.copy())
-        self._outcome_chunks.append(y.astype(np.uint8))
-        self._retained += p.size
-        excess = 0 if self.window_size is None else self._retained - self.window_size
-        while excess > 0:
-            oldest = self._probability_chunks[0].size
-            if oldest <= excess:
-                del self._probability_chunks[0], self._outcome_chunks[0]
-                self._retained -= oldest
-                excess -= oldest
-                continue
-            self._probability_chunks[0] = _drop_head(
-                self._probability_chunks[0], excess
-            )
-            self._outcome_chunks[0] = _drop_head(self._outcome_chunks[0], excess)
-            self._retained -= excess
-            excess = 0
-
-    def _history(self) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
-        if len(self._probability_chunks) > 1:
-            self._probability_chunks = [np.concatenate(self._probability_chunks)]
-            self._outcome_chunks = [np.concatenate(self._outcome_chunks)]
-        if not self._probability_chunks:
-            return np.empty(0), np.empty(0)
-        return (
-            self._probability_chunks[0],
-            self._outcome_chunks[0].astype(np.float64),
-        )
 
     @property
     def is_ready(self) -> bool:
@@ -170,14 +124,12 @@ class BatchCalibrator(BaseCalibrator):
     @property
     def history_bytes(self) -> int:
         """Return retained input-array bytes, excluding the fitted model."""
-        return sum(
-            chunk.nbytes for chunk in self._probability_chunks + self._outcome_chunks
-        )
+        return self._probabilities.nbytes + self._outcomes.nbytes
 
     @property
     def retained_observations(self) -> int:
         """Return the number of outcomes available for the next refit."""
-        return self._retained
+        return self._outcomes.size
 
     def calibrate(self, probabilities: ArrayLike) -> NDArray[np.float64]:
         """Apply the last completed fit, or identity before readiness."""
@@ -188,29 +140,32 @@ class BatchCalibrator(BaseCalibrator):
             return self._model.predict(p)
         return self._model.predict_proba(p[:, None])[:, 1]
 
-    def _fit(
-        self, p: NDArray[np.float64], y: NDArray[np.float64]
-    ) -> CalibratedClassifierCV | IsotonicRegression:
-        if self.method == "isotonic":
-            return IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip").fit(
-                p, y
-            )
-        return CalibratedClassifierCV(
-            FrozenEstimator(ProbabilityClassifier()),
-            method=self.method,
-            cv=_CalibrationRows(),
-        ).fit(p[:, None], y)
-
     def update(self, probabilities: ArrayLike, outcomes: ArrayLike) -> Self:
         """Retain new observations and refit at the configured cadence."""
         p, y = paired_binary_data(probabilities, outcomes)
         if self.frozen:
             return self
-        self._append(p, y)
-        if (self.n_updates + 1) % self.refit_every == 0:
-            retained_p, retained_y = self._history()
-            if np.unique(retained_y).size == 2:
-                self._model = self._fit(retained_p, retained_y)
+        retained_p = np.concatenate((self._probabilities, p))
+        retained_y = np.concatenate((self._outcomes, y.astype(np.uint8)))
+        if self.window_size is not None:
+            retained_p = retained_p[-self.window_size :].copy()
+            retained_y = retained_y[-self.window_size :].copy()
+        model = self._model
+        if (self.n_updates + 1) % self.refit_every == 0 and np.unique(
+            retained_y
+        ).size == 2:
+            if self.method == "isotonic":
+                model = IsotonicRegression(
+                    y_min=0.0, y_max=1.0, out_of_bounds="clip"
+                ).fit(retained_p, retained_y.astype(np.float64))
+            else:
+                model = CalibratedClassifierCV(
+                    FrozenEstimator(ProbabilityClassifier()),
+                    method=self.method,
+                    cv=_CalibrationRows(),
+                ).fit(retained_p[:, None], retained_y.astype(np.float64))
+        self._probabilities, self._outcomes = retained_p, retained_y
+        self._model = model
         self.n_updates += 1
         self.n_observations += p.size
         return self

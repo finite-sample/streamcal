@@ -209,28 +209,6 @@ class TradeoffReport:
         return float(losses.mean()), float(interval[0, 0]), float(interval[1, 0])
 
 
-def _batch_brier(outcomes: np.ndarray, probabilities: np.ndarray) -> float:
-    """Brier score of one batch, without re-validating its inputs.
-
-    ``brier_score`` validates its inputs on every call, which costs about a
-    millisecond; per batch of one that dominates the whole evaluation. Every
-    forecast is still validated once, when the full stream is scored. The
-    expression is scikit-learn's two-column form rather than
-    ``mean((y - p) ** 2)``, so the result matches ``brier_score`` exactly.
-
-    Args:
-        outcomes: Binary outcomes.
-        probabilities: Forecast probabilities aligned with ``outcomes``.
-
-    Returns:
-        Mean squared probability error.
-    """
-    squared = ((1.0 - outcomes) - (1.0 - probabilities)) ** 2 + (
-        outcomes - probabilities
-    ) ** 2
-    return float(np.mean(squared) * 0.5)
-
-
 def retained_array_bytes(calibrator: BaseCalibrator) -> int:
     """Return owned numerical-array storage across state and upstream models."""
     seen: set[int] = set()
@@ -368,7 +346,7 @@ def compare_prequential(
             predict_calls.append(perf_counter_ns() - before)
             predict_ns += predict_calls[-1]
             calibrated_batches.append(calibrated)
-            batch_score = _batch_brier(batch_outcomes, calibrated)
+            batch_score = brier_score(batch_outcomes, calibrated)
             batch_scores.append(batch_score)
             cumulative_squared_error += batch_score * calibrated.size
             cumulative_observations += calibrated.size

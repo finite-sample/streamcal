@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 import streamcal
-from streamcal import BatchCalibrator, brier_score
+from streamcal import BatchCalibrator
 from streamcal.calibrators import (
     _GRID_INDEX_FROM,
     _GRID_INTERP_FROM,
@@ -16,7 +16,6 @@ from streamcal.calibrators import (
     _grid_interp,
     _interpolate,
 )
-from streamcal.evaluation import _batch_brier
 
 
 def _adversarial_points(n_bins, rng):
@@ -61,7 +60,7 @@ def test_size_switches_agree_on_both_sides_of_the_threshold(n_bins):
 
 
 @pytest.mark.parametrize("window", [None, 1, 7, 50])
-def test_chunked_history_refits_on_exactly_the_retained_rows(window):
+def test_one_byte_labels_refit_on_exactly_the_retained_rows(window):
     rng = np.random.default_rng(1)
     chunked = BatchCalibrator(window_size=window)
     seen_p, seen_y = [], []
@@ -92,14 +91,6 @@ def test_history_does_not_alias_caller_arrays():
     )
     grid = np.linspace(0.0, 1.0, 11)
     assert np.array_equal(model.calibrate(grid), direct.calibrate(grid))
-
-
-def test_batch_brier_matches_the_validated_metric_bit_for_bit():
-    rng = np.random.default_rng(2)
-    for size in (1, 2, 3, 336, 10_001):
-        p = rng.random(size)
-        y = (rng.random(size) < p).astype(float)
-        assert _batch_brier(y, p) == brier_score(y, p)
 
 
 def test_importing_the_streaming_calibrator_does_not_load_scikit_learn():

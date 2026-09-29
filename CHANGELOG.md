@@ -16,13 +16,11 @@ Release tags match the version committed in `pyproject.toml`.
 - Batches of 1,024+ labels find their bins, and 2,048+ probabilities
   interpolate, by direct calculation on the evenly spaced grid rather than a
   binary search, with identical results.
-- `import streamcal` no longer loads scikit-learn (1.1 s to 0.1 s). Names that
-  need it load on first use.
-- `BatchCalibrator` keeps history in chunks and stores labels as one byte, so
-  an update that does not refit no longer copies all history (265x faster at
-  one million rows) and history takes 9 rather than 16 bytes per row.
-- `compare_prequential` scores each batch without re-validating it, 18x
-  faster at batch size one, with identical scores.
+- `import streamcal` no longer loads scikit-learn (1.1 s to 0.08 s). Names that
+  need it load on first use. A process that only runs the streaming calibrator
+  peaks at 75 MB rather than 148 MB.
+- `BatchCalibrator` stores labels as one byte, so history takes 9 rather than
+  16 bytes per observation, with identical fits.
 
 ### Fixed
 
