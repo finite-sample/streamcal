@@ -3,6 +3,7 @@
 [![CI](https://github.com/finite-sample/streamcal/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/streamcal/actions/workflows/ci.yml)
 [![Docs](https://github.com/finite-sample/streamcal/actions/workflows/docs.yml/badge.svg)](https://finite-sample.github.io/streamcal/)
 [![PyPI](https://img.shields.io/pypi/v/streamcal)](https://pypi.org/project/streamcal/)
+[![PyPI Downloads](https://static.pepy.tech/badge/streamcal)](https://pepy.tech/projects/streamcal)
 [![Python](https://img.shields.io/pypi/pyversions/streamcal)](https://pypi.org/project/streamcal/)
 [![License: MIT](https://img.shields.io/pypi/l/streamcal)](https://github.com/finite-sample/streamcal/blob/main/LICENSE)
 

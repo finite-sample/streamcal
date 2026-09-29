@@ -1,116 +1,97 @@
-# Evidence: expected results and useful trade-offs
+# Evidence
 
-Correctness means obtaining the expected result for the stated objective.
-The [formalization](formalization.md) proves that weighted bin counts and label
-totals preserve the complete binned isotonic objective. Exact-reference tests
-check its implementation with forgetting, the identity prior, late labels,
-single-class data, and reset/serialization. This is a stronger foundation than
-requiring the package to win an empirical benchmark.
+There are two questions: does streamcal compute what it claims, and is that
+useful?
 
-When changing bins or forgetting, the objective itself changes. The useful
-question is then which method gives the lowest chosen error within the user's
-resource budget. `TradeoffReport.select` minimizes Brier, log loss, or binned
-calibration error subject to p95 prediction/update latency and serialized-state
-limits. The user supplies those limits; no universal equivalence margin is
-assumed. A report can also return no feasible configuration.
+**Does it compute what it claims?** The [formalization](formalization.md)
+proves that keeping two numbers per bin fits exactly the same map as keeping
+the whole history. The test suite checks the implementation against a
+full-history reference, including forgetting, the prior, late labels,
+streams with only one outcome class, and reset and serialization. That is the
+correctness guarantee. It does not depend on winning any benchmark.
 
-## Protocol
+**Is it useful?** That is an empirical question, and this page answers it on
+one real stream and a set of simulations.
 
-The Elec2 dataset is [OpenML 151, version 1](https://www.openml.org/d/151), MD5
-`8ca97867d960ae029ae3a9ac2c923d34`, with 45,312 chronological records.
+## What we found
 
-1. Fit a frozen logistic base model on the first 20%.
-2. Use the first half of the next 10% to initialize every candidate. Frozen
-   references retain that fitted map; other methods continue updating.
-3. Score the second half of that validation period in predict-then-observe
-   order. Select one setting per predeclared family by Brier and select operating
-   points by their stated objectives and budgets.
-4. Reconstruct each selected candidate from the entire validation period, then
-   evaluate it on the final 70%. No final-period labels select settings.
+- **On the electricity stream, streamcal roughly halved forecast error**
+  (Brier score down 51% from the uncalibrated model). It was clearly better
+  than 9 of the 11 alternatives. Refitting sigmoid or isotonic calibration on
+  the most recent 336 labels did about as well: the data cannot separate
+  them from streamcal. Streamcal stored about a fifth of their state, and
+  under 1/400th of what the methods that refit on all history stored.
+- **In simulations where the true probability is known**, streamcal had the
+  smallest error of the three adaptive methods in every scenario. When the
+  model was already calibrated, every adaptive method made it slightly worse,
+  streamcal by the least (about 5 percentage points of noise).
+- **Choosing by validation is not a guarantee.** Under a 1 ms update budget,
+  the streamcal setting chosen on validation data took 1.01 ms on the test
+  period, just over budget. Under a looser budget, online logistic regression
+  won on validation but did worse than streamcal on test.
 
-The fixed search includes 36 streamcal settings (20/50/100 bins,
-0.5/0.9/0.99/1 decay, 1/10/100 prior weight); rolling references use
-336/1,344/5,376-observation windows and refit every 1/4/16 batches. Online
-logistic uses River SGD with learning rates 0.001/0.01/0.1. There are also raw,
-frozen, and accumulating references. Each scored batch has up to 336 rows.
-The complete search results are retained, including losing configurations.
+```{include} evidence-results.md
+```
 
-Paired Brier intervals use `arch` circular block bootstrap over 1,344 consecutive
-test observations and 2,000 replicates. This preserves pairing and weights
-individual observations equally. These are descriptive dependence-aware
-intervals from one stream; stationarity and block length affect their validity.
-An interval containing zero does not prove equivalence.
+## How the comparison was run
 
-## Interpreting the result
+**Data.** The Elec2 electricity-price dataset ([OpenML 151, version
+1](https://www.openml.org/d/151), MD5 `8ca97867d960ae029ae3a9ac2c923d34`):
+45,312 half-hourly records, used in time order.
 
-The stronger rolling references largely close the Brier gap from the original
-accumulating-only comparison. Streamcal and tuned rolling sigmoid are close on
-this stream, while streamcal retains less state. Direct rolling isotonic can
-also be faster than streamcal in individual timing runs. Online logistic has
-smaller serialized state than streamcal and wins some
-validation selections, but performs worse on the final period. These results
-show why an honest operating-point selector cannot always choose streamcal.
-Validation-feasible choices can exceed a tight latency budget on the final
-period; the generated table records those failures instead of treating the
-validation measurement as a runtime guarantee.
+1. **Base model.** A logistic regression is fit on the first 20% and then
+   frozen. Its probabilities are what every method calibrates.
+2. **Validation.** Over the next 10%, each method warms up on the first half.
+   Its settings are then chosen on the second half by Brier score.
+3. **Test.** The final 70% is never used to choose anything. Every method
+   predicts each batch of 336 records (one week) before seeing that batch's
+   outcomes, then learns from them.
 
-Controlled experiments report distance to a known conditional probability,
-alongside proper scores. They include cases where the raw model is already
-correct and where adaptation adds estimation noise. Sparse-label experiments
-still score all forecasts offline but reveal only a subset of labels for
-updates. Delayed experiments use River's event scheduling and prediction-age
-weights. Fixed settings across these scenarios expose weaknesses rather than
-retuning each method on its test data.
+**Settings searched.** Streamcal: 36 combinations of 20/50/100 bins,
+0.5/0.9/0.99/1 decay and 1/10/100 prior weight. Rolling methods: windows of
+336, 1,344 or 5,376 records, refit every 1, 4 or 16 batches. Online logistic
+regression (River): learning rates 0.001, 0.01 or 0.1. Frozen, full-history
+and uncalibrated references need no tuning. The JSON results keep every
+setting, including the ones that lost.
 
-The learning curves in the JSON show cumulative test-period scores. They do
-not establish that fewer labels are needed: the methods saw a common warm-up
-period, and the underlying distribution changes across the curve. The formal
-claim is fewer **retained historical records** for the same binned objective.
+**Intervals.** Paired differences are resampled in blocks of 1,344
+consecutive records (2,000 resamples), so the intervals account for
+neighbouring records being alike. They describe this one stream and assume
+its behaviour is roughly stable across blocks.
+
+## Caveats
+
+- **Binary outcomes only.** Always update with the model's original
+  probabilities, not calibrated ones.
+- **Per-update decay depends on batching.** Splitting the same labels into
+  more update calls forgets faster. Half-life mode uses timestamps instead and
+  is unaffected by how labels are grouped.
+- **Binned calibration error depends on the bin count** and can reward a
+  forecast that ignores its input. Look at Brier score alongside it.
+- **Ranking can change.** Each fitted map preserves order, but the map changes
+  over time, so AUROC over a whole stream can differ from the raw model's.
+- **Late labels are your storage.** Streamcal keeps no queue of pending
+  labels. Holding them until they arrive is the caller's job and is outside
+  the fixed-memory claim.
+- **Timings are from one machine** (an Apple-silicon Mac). Re-check budgets on
+  your own hardware.
+- **Not evidence of needing fewer labels.** The learning curves in the JSON are
+  cumulative scores on a changing stream. The formal result is about storing
+  fewer past records, not learning from fewer labels.
 
 ## Reproduce
 
-The committed measurements are a recorded snapshot from
-[candidate 492bd39](https://github.com/finite-sample/streamcal/tree/492bd3986bab52dccc04d14f4d3a80a0a8ce096d).
-The release changes that measured source only to accept a zero-byte selection
-budget and document that boundary; its test settings also enforce strict
-configuration, markers, expected failures, and warnings. None of the benchmark
-configurations uses a zero-byte budget. The JSON fingerprints identify the
-measured snapshot, not the final release; they have not been relabeled.
-Check out that candidate to reproduce its implementation, or run the following
-on the release to collect new measurements:
+The numbers above were measured at
+[commit 492bd39](https://github.com/finite-sample/streamcal/tree/492bd3986bab52dccc04d14f4d3a80a0a8ce096d).
+The code has changed since, so measuring again gives new numbers:
 
 ```bash
 uv sync --all-groups --all-extras
 make evidence
 ```
 
-This writes `benchmarks/results/quality.json`, `benchmarks/results/resources.json`,
-and the tables included below. Results carry package versions, dataset identity,
-split points, settings, and a SHA-256 fingerprint of implementation files and
-the dependency lock. The resource sweep runs methods serially in fresh Python
-processes. Measurements describe this machine and invocation; neither p95
-latency nor serialized size is a worst-case execution or process-memory bound.
-
-The evidence workflow archives the JSON. Ordinary tests check numerical
-identities and behavior; they do not require superiority on Elec2 or a timing
-win on a shared CI runner.
-
-```{include} evidence-results.md
-```
-
-## Limits and decision rules
-
-- Binary probabilities only. Labels must correspond to the original forecasts.
-- Per-update decay depends on batch cadence. Prediction-age half-life uses
-  explicit timestamps and is invariant to regrouping available labels at a
-  fixed final time, up to floating point arithmetic.
-- Bin resolution changes the approximation. Equality to the binned objective
-  does not imply equality to unbinned isotonic regression.
-- Binned error depends on its bin count and can reward uninformative forecasts.
-  Keep proper scores visible even when choosing that diagnostic as the objective.
-- AUROC across a changing calibration map need not equal raw AUROC, even though
-  every individual map is monotone.
-- The calibrator owns no pending-label queue. The offline evaluator and caller's
-  delayed-label storage are outside the bounded-state claim.
-- Select on validation, evaluate once on a later period, and recheck resource
-  budgets on the deployment hardware. Validation winners can lose out of sample.
+This rewrites `benchmarks/results/quality.json`, `benchmarks/results/resources.json`
+and the tables on this page. The JSON records package versions, dataset
+identity, split points, settings, and a fingerprint of the source and
+dependency lock. The test suite does not require streamcal to win on Elec2 or
+to beat any timing on CI.
