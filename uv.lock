@@ -1491,7 +1491,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.5.3" },
     { name = "river", marker = "extra == 'evaluation'", specifier = ">=0.26.1" },
     { name = "scikit-learn", specifier = ">=1.8" },
-    { name = "scipy", specifier = ">=1.11" },
+    { name = "scipy", specifier = ">=1.12" },
 ]
 provides-extras = ["evaluation"]
 

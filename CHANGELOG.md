@@ -7,6 +7,21 @@ Release tags match the version committed in `pyproject.toml`.
 
 ## [Unreleased]
 
+### Changed
+
+- `StreamingIsotonicCalibrator` fits with SciPy's `isotonic_regression`
+  instead of scikit-learn's `IsotonicRegression`, which spent over 90% of each
+  update validating inputs. Updates and half-life calibration are 11-27x
+  faster; outputs are bit-for-bit unchanged. Requires SciPy 1.12.
+- Batches of 1,024+ labels find their bins, and 2,048+ probabilities
+  interpolate, by direct calculation on the evenly spaced grid rather than a
+  binary search, with identical results.
+- `import streamcal` no longer loads scikit-learn (1.1 s to 0.08 s). Names that
+  need it load on first use. A process that only runs the streaming calibrator
+  peaks at 75 MB rather than 148 MB.
+- `BatchCalibrator` stores labels as one byte, so history takes 9 rather than
+  16 bytes per observation, with identical fits.
+
 ### Fixed
 
 - `compare_prequential` no longer times batches with no observed labels as

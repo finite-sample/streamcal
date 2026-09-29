@@ -98,7 +98,9 @@ class BatchCalibrator(BaseCalibrator):
     def reset(self) -> Self:
         """Discard history and the fitted map."""
         self._probabilities = np.empty(0)
-        self._outcomes = np.empty(0)
+        # Labels are 0 or 1, so one byte each is enough: 9 rather than 16
+        # bytes of history per observation. Fits convert them back to float.
+        self._outcomes = np.empty(0, dtype=np.uint8)
         self._model: CalibratedClassifierCV | IsotonicRegression | None = None
         self.n_updates = 0
         self.n_observations = 0
@@ -110,7 +112,7 @@ class BatchCalibrator(BaseCalibrator):
         if not self.is_ready:
             raise ValueError("cannot freeze before a successful fit")
         self._probabilities = np.empty(0)
-        self._outcomes = np.empty(0)
+        self._outcomes = np.empty(0, dtype=np.uint8)
         self.frozen = True
         return self
 
@@ -144,7 +146,7 @@ class BatchCalibrator(BaseCalibrator):
         if self.frozen:
             return self
         retained_p = np.concatenate((self._probabilities, p))
-        retained_y = np.concatenate((self._outcomes, y))
+        retained_y = np.concatenate((self._outcomes, y.astype(np.uint8)))
         if self.window_size is not None:
             retained_p = retained_p[-self.window_size :].copy()
             retained_y = retained_y[-self.window_size :].copy()
@@ -155,13 +157,13 @@ class BatchCalibrator(BaseCalibrator):
             if self.method == "isotonic":
                 model = IsotonicRegression(
                     y_min=0.0, y_max=1.0, out_of_bounds="clip"
-                ).fit(retained_p, retained_y)
+                ).fit(retained_p, retained_y.astype(np.float64))
             else:
                 model = CalibratedClassifierCV(
                     FrozenEstimator(ProbabilityClassifier()),
                     method=self.method,
                     cv=_CalibrationRows(),
-                ).fit(retained_p[:, None], retained_y)
+                ).fit(retained_p[:, None], retained_y.astype(np.float64))
         self._probabilities, self._outcomes = retained_p, retained_y
         self._model = model
         self.n_updates += 1
