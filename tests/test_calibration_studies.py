@@ -314,7 +314,7 @@ def _group_index(q):
 def _flags_miscalibration(values, y, groups):
     """Whether the max-|Z| test rejects perfect calibration of ``values``.
 
-    Within each group the standardised score ``sum(y - f) / sqrt(sum f(1-f))``
+    Within each group the standardized score ``sum(y - f) / sqrt(sum f(1-f))``
     is asymptotically standard normal when ``f`` is the true conditional
     probability, by the Poisson-binomial CLT. That is the whole null: no
     parameters are estimated on this sample, so there is no degrees-of-freedom

@@ -26,7 +26,7 @@ def _grid_index(values: NDArray[np.float64], grid: NDArray[np.float64]) -> NDArr
     Returns ``j`` with ``grid[j] <= value < grid[j + 1]``, clipped to
     ``[0, grid.size - 2]``: exactly what ``np.searchsorted(grid, values,
     "right") - 1`` gives after clipping. The spacing makes ``j`` computable
-    directly; one comparison with each neighbour then corrects the rounding
+    directly; one comparison with each neighbor then corrects the rounding
     of that computation, so the result never depends on it. That replaces
     ``O(log n)`` comparisons per value with ``O(1)``.
 
@@ -336,5 +336,5 @@ class StreamingIsotonicCalibrator(BaseCalibrator):
         np.clip(fitted, 0.0, 1.0, out=fitted)
         if active.all():
             return fitted
-        # Bins with no weight take values interpolated from their neighbours.
+        # Bins with no weight take values interpolated from their neighbors.
         return np.interp(self.bin_centers, self.bin_centers[active], fitted)

@@ -56,8 +56,8 @@ setting, including the ones that lost.
 
 **Intervals.** Paired differences are resampled in blocks of 1,344
 consecutive records (2,000 resamples), so the intervals account for
-neighbouring records being alike. They describe this one stream and assume
-its behaviour is roughly stable across blocks.
+neighboring records being alike. They describe this one stream and assume
+its behavior is roughly stable across blocks.
 
 ## Caveats
 

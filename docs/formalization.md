@@ -54,7 +54,7 @@ Streamcal passes these weights and targets to SciPy's
 `scipy.optimize.isotonic_regression`; it does not implement the isotonic
 solver. A bin with
 zero weight (possible only when $\lambda = 0$) is left out of the fit, and its
-value is interpolated from its neighbours. A raw-history implementation has to
+value is interpolated from its neighbors. A raw-history implementation has to
 use the same convention for the two to agree, because the objective leaves
 those values undetermined.
 

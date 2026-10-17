@@ -114,6 +114,7 @@ allow-init-docstring = true
 exclude = '\.venv|tests|docs'
 
 [tool.codespell]
+builtin = "clear,rare,en-GB_to_en-US"
 # "retuned" is the intended word -- a test docstring talks about retuning the
 # distortion the study injects, not about anything being returned.
 ignore-words-list = "retuned"
