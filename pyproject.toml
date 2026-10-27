@@ -53,7 +53,7 @@ test = [
     "pytest-cov>=6",
     # Monte Carlo test machinery. A dependency-group, not an extra: PyPI rejects
     # direct URL references in published project metadata.
-    "simcheck @ git+https://github.com/finite-sample/simcheck",
+    "simcheck",
 ]
 docs = [
     "sphinx>=8",
@@ -134,3 +134,7 @@ source = ["src"]
 
 [tool.uv.build-backend]
 module-name = "streamcal"
+
+[tool.uv.sources]
+# The statistical test helper is unrelated to the simcheck package on PyPI.
+simcheck = { git = "https://github.com/finite-sample/simcheck" }

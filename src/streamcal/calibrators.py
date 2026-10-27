@@ -51,8 +51,9 @@ def _grid_interp(
     """``np.interp(values, grid, fitted)`` for an evenly spaced ``grid``.
 
     Finds each interval with :func:`_grid_index` instead of a binary search,
-    then evaluates the same expression ``np.interp`` does, so the result is
-    the same to the last bit.
+    then evaluates the same expression as ``np.interp``. For nondecreasing
+    probability values, results differ by at most one floating-point step:
+    NumPy may fuse the multiply-add while separate ufuncs round twice.
 
     Args:
         values: Points to interpolate at.
@@ -71,8 +72,8 @@ def _grid_interp(
 
 
 # Batch sizes from which the grid kernels beat NumPy's binary searches. Below
-# them, NumPy's lower fixed cost wins. Both paths give identical results, so
-# the switch changes speed only. Measured with ``benchmarks.speed``.
+# them, NumPy's lower fixed cost wins. Index choices are identical; interpolation
+# can differ by one floating-point step. Measured with ``benchmarks.speed``.
 _GRID_INDEX_FROM = 1024
 _GRID_INTERP_FROM = 2048
 
