@@ -1,4 +1,4 @@
-# streamcal
+# streamcal: calibrate probabilities as outcomes arrive
 
 [![CI](https://github.com/finite-sample/streamcal/actions/workflows/ci.yml/badge.svg)](https://github.com/finite-sample/streamcal/actions/workflows/ci.yml)
 [![Docs](https://github.com/finite-sample/streamcal/actions/workflows/docs.yml/badge.svg)](https://finite-sample.github.io/streamcal/)
