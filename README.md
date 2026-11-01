@@ -188,9 +188,9 @@ MIT
 
 ## 🔗 Adjacent Repositories
 
-- [finite-sample/optimal-classification-cutoffs](https://github.com/finite-sample/optimal-classification-cutoffs) — Cutoffs for max. multiclass F1-score, etc.
 - [finite-sample/calibre](https://github.com/finite-sample/calibre) — Advanced Calibration Models
 - [finite-sample/rank-preserving-calibration](https://github.com/finite-sample/rank-preserving-calibration) — Rank preserving calibration of multiclass prob.
+- [finite-sample/onlinerake](https://github.com/finite-sample/onlinerake) — Online raking with SGD or MWU
 
 _Powered by [Adjacent](https://github.com/gojiplus/adjacent)_
 
