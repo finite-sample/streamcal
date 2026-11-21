@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sklearn.calibration import calibration_curve
-from sklearn.metrics import brier_score_loss
 
 from streamcal._validation import paired_binary_data, positive_integer
 
@@ -25,7 +23,7 @@ def brier_score(outcomes: ArrayLike, probabilities: ArrayLike) -> float:
         Mean squared probability error.
     """
     probability_array, outcome_array = paired_binary_data(probabilities, outcomes)
-    return float(brier_score_loss(outcome_array, probability_array, pos_label=1))
+    return float(np.mean(np.square(outcome_array - probability_array)))
 
 
 def binned_calibration_error(
@@ -51,8 +49,6 @@ def binned_calibration_error(
     probability_array, outcome_array = paired_binary_data(probabilities, outcomes)
     edges = np.linspace(0.0, 1.0, n_bins + 1)
     indices = np.searchsorted(edges[1:-1], probability_array)
-    counts = np.bincount(indices, minlength=n_bins)
-    observed, predicted = calibration_curve(
-        outcome_array, probability_array, n_bins=n_bins, pos_label=1
-    )
-    return float(np.average(np.abs(observed - predicted), weights=counts[counts > 0]))
+    # Each bin's count cancels the denominator of its mean error.
+    bin_errors = np.bincount(indices, weights=outcome_array - probability_array)
+    return float(np.sum(np.abs(bin_errors)) / probability_array.size)

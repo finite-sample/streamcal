@@ -32,8 +32,7 @@ __all__ = [
     "compare_prequential",
 ]
 
-# Names whose modules import scikit-learn. They load on first access, so a
-# service that only runs StreamingIsotonicCalibrator never imports it.
+# Load batch, evaluation, and metrics modules only when their names are requested.
 _LAZY = {
     "BatchCalibrator": "streamcal.batch",
     "ConfigurationResult": "streamcal.evaluation",
