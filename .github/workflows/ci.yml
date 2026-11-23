@@ -21,7 +21,7 @@ jobs:
     with:
       # Canon's default matrix is ["3.11", "3.14"]; requires-python floors at
       # 3.12, so the 3.11 leg cannot resolve.
-      python-versions: '["3.12", "3.14"]'
+      python-versions: '["3.13", "3.14"]'
       wheel-import: streamcal
       coverage-floor: 96
       run-preen: true
